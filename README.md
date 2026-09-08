@@ -6,6 +6,13 @@ waveforms and a register map, in the style of a foundry IP datasheet.
 
 Output is two files: an **HTML** you can keep editing, and an **A4 PDF** you can print or mail.
 
+<p align="center">
+  <img src="example/sample-page.png" width="45%" alt="Cover page: overview and key figures">
+  <img src="example/sample-blockdiagram.png" width="45%" alt="Connectivity block diagram">
+</p>
+
+<p align="center"><sub>Sample output. Module names are anonymised.</sub></p>
+
 ## What it actually does
 
 Facts come out of the RTL; prose is written by hand. That split is the whole design:

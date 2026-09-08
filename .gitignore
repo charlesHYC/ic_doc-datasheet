@@ -4,3 +4,4 @@ modules.json
 *_datasheet_manual.html
 *_datasheet_manual.pdf
 *.png
+!example/*.png
