@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+modules.json
+*_datasheet_manual.html
+*_datasheet_manual.pdf
+*.png
