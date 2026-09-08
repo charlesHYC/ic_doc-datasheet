@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""Pull the module header out of a Verilog-2001 source file.
+"""Pull the module header out of a Verilog source file.
 
-Scoped to what this project's RTL actually uses: ANSI-style headers, parameters
-with or without a type, `// ---- ... ----` banners used as port grouping, and
-trailing comments. It reads the header and stops; it is not a general parser.
+Handles both header styles: ANSI-2001, where directions and widths sit in the
+port list, and Verilog-95, where the header carries bare names and the
+declarations follow inside the module. Memory compilers and other vendor macros
+almost always emit the older style.
+
+It reads one module - the first in the file - and stops at its `endmodule`. It
+is not a general parser.
 
 All structural scanning runs over a copy of the source with comments and string
 bodies blanked out, so a semicolon or bracket inside a comment cannot mislead it.
@@ -11,6 +15,8 @@ bodies blanked out, so a semicolon or bracket inside a comment cannot mislead it
 import json
 import re
 import sys
+
+IDENT = r'[A-Za-z_][A-Za-z_0-9$]*'
 
 BANNER = re.compile(r'^\s*//\s*[-=]{3,}\s*$')
 PORT = re.compile(r"""^\s*
@@ -24,8 +30,55 @@ PARAM = re.compile(r"""^\s*parameter\b\s*
     (?:(?P<type>integer|real|signed|\[[^\]]*\])\s*)?
     (?P<name>[A-Za-z_][A-Za-z_0-9$]*)\s*=\s*
     (?P<value>.+?)\s*,?\s*$""", re.X)
+# re.M matters: without it `^` only ever matches the start of the whole body and
+# every module comes back with no localparams at all.
 LOCALPARAM = re.compile(r'^\s*localparam\s+(?:\[[^\]]*\]\s*)?'
-                        r'(?P<name>[A-Za-z_][A-Za-z_0-9$]*)\s*=\s*(?P<value>[^;]+);')
+                        r'(?P<name>[A-Za-z_][A-Za-z_0-9$]*)\s*=\s*(?P<value>[^;]+);', re.M)
+
+# A Verilog-95 port declaration, which lives in the body rather than the header:
+#   output [127:0] Q;      input CLK;      input a, b, c;
+DECL = re.compile(r"""^\s*
+    (?P<dir>input|output|inout)\b\s*
+    (?:(?P<net>wire|reg|logic)\b\s*)?
+    (?:(?:signed|unsigned)\b\s*)?
+    (?P<width>\[[^\]]*\]\s*)?
+    (?P<names>[A-Za-z_][^;]*?)\s*;""", re.X)
+# Same, for parameters declared inside a Verilog-95 module.
+BODY_PARAM = re.compile(r"""^\s*parameter\b\s*
+    (?:(?P<type>integer|real|signed|\[[^\]]*\])\s*)?
+    (?P<name>[A-Za-z_][A-Za-z_0-9$]*)\s*=\s*
+    (?P<value>[^;]+);""", re.X)
+
+# An instantiation is a type followed by an instance name and then a port list,
+# with an optional parameter override and instance array range between them.
+# Requiring the instance name is what keeps task and function calls out: a call
+# is one identifier followed straight by "(".
+INST = re.compile(r"""^[ \t]*
+    (?P<type>[A-Za-z_][A-Za-z_0-9$]*)
+    (?:
+        [ \t]*\#\s*\((?:[^()]|\([^()]*\))*\)\s*   # override, may span lines
+      | [ \t]+                                        # or nothing between them,
+    )                                                 # in which case: same line
+    (?P<inst>[A-Za-z_][A-Za-z_0-9$]*)\s*
+    (?:\[[^\]]*\]\s*)?
+    \(""", re.M | re.X)
+
+# Keywords that can appear in the shape INST matches. Gate primitives really do
+# take an instance name, so they have to be named rather than matched away.
+NOT_A_MODULE = {
+    'if', 'for', 'case', 'casez', 'casex', 'always', 'always_ff', 'always_comb',
+    'always_latch', 'initial', 'final', 'assign', 'begin', 'else', 'module',
+    'end', 'join', 'fork', 'endtask', 'endfunction', 'endprimitive',
+    'input', 'output', 'inout', 'wire', 'reg', 'logic', 'localparam',
+    'parameter', 'generate', 'endgenerate', 'function', 'task',
+    'endcase', 'endmodule', 'posedge', 'negedge', 'repeat', 'while',
+    'forever', 'wait', 'integer', 'real', 'genvar', 'defparam', 'specify',
+    'endspecify', 'return', 'disable', 'force', 'release', 'deassign',
+    'and', 'or', 'not', 'nand', 'nor', 'xor', 'xnor', 'buf', 'bufif0', 'bufif1',
+    'notif0', 'notif1', 'pmos', 'nmos', 'cmos', 'rpmos', 'rnmos', 'rcmos',
+    'tran', 'tranif0', 'tranif1', 'rtran', 'rtranif0', 'rtranif1', 'pullup',
+    'pulldown', 'supply0', 'supply1', 'tri', 'triand', 'trior', 'wand', 'wor',
+}
 
 
 def blank(src):
@@ -52,11 +105,16 @@ def blank(src):
 
 
 def split_header(src):
-    """(module name, header source text, 1-based start line)."""
+    """(module name, header text, 1-based start line, offset just past the header).
+
+    The offset is returned because the header does not necessarily begin at the
+    start of the file; slicing the body by len(header) instead lands in the
+    middle of whatever banner comment precedes the module.
+    """
     b = blank(src)
-    m = re.search(r'\bmodule\s+([A-Za-z_][A-Za-z_0-9$]*)', b)
+    m = re.search(r'\bmodule\s+(%s)' % IDENT, b)
     if not m:
-        return None, None, None
+        return None, None, None, None
     start = m.start()
     depth, seen, i = 0, False, start
     while i < len(b):
@@ -67,9 +125,12 @@ def split_header(src):
             if seen and depth == 0:
                 j = b.find(';', i)
                 j = len(b) if j < 0 else j + 1
-                return m.group(1), src[start:j], src[:start].count('\n') + 1
+                return m.group(1), src[start:j], src[:start].count('\n') + 1, j
+        elif b[i] == ';' and not seen:
+            # a module with no port list at all
+            return m.group(1), src[start:i + 1], src[:start].count('\n') + 1, i + 1
         i += 1
-    return m.group(1), src[start:], src[:start].count('\n') + 1
+    return m.group(1), src[start:], src[:start].count('\n') + 1, len(src)
 
 
 def clean(text):
@@ -89,9 +150,63 @@ def strip_trailing(line):
     return line, ''
 
 
+def header_port_order(header):
+    """Port names from a Verilog-95 header, or None if this is not one.
+
+    A bare name list is the signature: anything carrying a direction keyword is
+    an ANSI header and belongs to the other path.
+    """
+    b = blank(header)
+    if '(' not in b:
+        return None
+    inner = b[b.index('(') + 1:b.rindex(')')] if ')' in b else ''
+    names = [t.strip() for t in inner.split(',') if t.strip()]
+    if not names or not all(re.fullmatch(IDENT, n) for n in names):
+        return None
+    return names
+
+
+def nonansi_ports(order, body, bline):
+    """Directions and widths for a Verilog-95 header.
+
+    Only names the header actually lists are accepted, so an `input` inside a
+    task or function cannot invent a port that is not on the interface.
+    """
+    want, found = set(order), {}
+    for off, raw in enumerate(body.split('\n')):
+        code, cmt = strip_trailing(raw)
+        m = DECL.match(code)
+        if not m:
+            continue
+        names = [n.strip() for n in m.group('names').split(',') if n.strip()]
+        if not all(re.fullmatch(IDENT, n) for n in names):
+            continue
+        for n in names:
+            if n in want and n not in found:
+                found[n] = {'name': n, 'dir': m.group('dir'),
+                            'net': m.group('net') or '',
+                            'width': (m.group('width') or '').strip(),
+                            'group': 'Ports', 'comment': clean(cmt),
+                            'line': bline + off}
+    return [found[n] for n in order if n in found]
+
+
+def nonansi_params(body, bline):
+    """Parameters declared inside a Verilog-95 module."""
+    out = []
+    for off, raw in enumerate(body.split('\n')):
+        code, cmt = strip_trailing(raw)
+        m = BODY_PARAM.match(code)
+        if m:
+            out.append({'name': m.group('name'), 'value': m.group('value').strip(),
+                        'type': (m.group('type') or '').strip(),
+                        'comment': clean(cmt), 'line': bline + off})
+    return out
+
+
 def parse(path):
     src = open(path, encoding='utf-8', errors='replace').read()
-    name, header, hline = split_header(src)
+    name, header, hline, hend = split_header(src)
     if header is None:
         return None
 
@@ -142,15 +257,28 @@ def parse(path):
             continue
         note = []
 
-    body = src[len(header):]
+    # Stop at this module's end, so a second module in the same file cannot
+    # contribute its declarations, localparams or instantiations to this one.
+    body = src[hend:]
+    end = re.search(r'\bendmodule\b', blank(body))
+    if end:
+        body = body[:end.start()]
+    bline = src[:hend].count('\n') + 1
+
+    if not ports:
+        order = header_port_order(header)
+        if order:
+            ports = nonansi_ports(order, body, bline)
+        if not params:
+            # Verilog-95, or a module with no port list: parameters are declared
+            # inside the module rather than in its header.
+            params = nonansi_params(body, bline)
+
     bb = blank(body)
     locals_ = [{'name': m.group('name'), 'value': m.group('value').strip()}
                for m in LOCALPARAM.finditer(bb)]
-    insts = sorted(set(re.findall(r'^\s*([a-z_][a-z_0-9]*)\s*#?\s*\(', bb, re.M)) - {
-        'if', 'for', 'case', 'casez', 'casex', 'always', 'initial', 'assign',
-        'begin', 'else', 'module', 'input', 'output', 'inout', 'wire', 'reg',
-        'localparam', 'parameter', 'generate', 'function', 'task', 'endcase',
-        'posedge', 'negedge', 'or', 'and', 'not', 'repeat', 'while', 'integer'})
+    insts = sorted({m.group('type') for m in INST.finditer(bb)
+                    if m.group('type') not in NOT_A_MODULE})
 
     return {'module': name, 'file': path, 'params': params, 'ports': ports,
             'localparams': locals_, 'instantiates': insts}

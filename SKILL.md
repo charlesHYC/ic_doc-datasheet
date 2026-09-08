@@ -53,6 +53,10 @@ compiler 那種），但**不做 process corner 的細部參數表**。
    輸出每個 module 的 name / params / ports / localparams / instantiates。
    banner 註解（`// ---- AXI write ----`）會被當成 port 分組標題。
 
+   ANSI-2001（方向寫在 port list 裡）與 **Verilog-95**（header 只有名字、方向與
+   位寬宣告在 module 內）兩種 header 都吃得下。memory compiler 與 vendor macro
+   幾乎都是後者。只讀檔案裡的**第一個** module，讀到它的 `endmodule` 為止。
+
    ⚠️ **不要 glob `<rtl>/*.v`。** RTL 目錄常留著 `_v1` / `_v2` 之類的舊檔，而且
    **檔名跟 module 名不一定一致**。真實案例：某專案裡 `write_path.v` 宣告的
    module 叫 `write_path_v2`，而 `top.v` / `top_v1.v` / `top_v2.v` 三個檔都宣告
@@ -256,7 +260,7 @@ chromium / wkhtmltopdf / weasyprint，就只能自己來：`scripts/topdf.py` �
 
 | 檔案 | 通用程度 |
 |---|---|
-| `scripts/extract.py` | ✅ 完全通用，任何 Verilog-2001 專案直接用 |
+| `scripts/extract.py` | ✅ 完全通用，Verilog-95 與 Verilog-2001 header 都支援 |
 | `scripts/paginate.py` | ✅ 完全通用。高度估算，讓 `build.py` 在超出前就把表格拆頁 |
 | `scripts/topdf.py` | ✅ 完全通用。轉 PDF，並在轉檔前檢查每頁是否真的放得進 A4 |
 | `scripts/wave.py` | renderer 通用；每張波形的 spec（哪些 cycle、哪些訊號）要照專案手寫 |
