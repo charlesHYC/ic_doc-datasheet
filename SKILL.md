@@ -167,6 +167,22 @@ compiler 那種），但**不做 process corner 的細部參數表**。
 - **說明文字寫在 HTML 的 `<figcaption>`，不要寫進 SVG**——SVG 的 text 不會自動換行，
   一定會衝出右邊界。
 - 每張圖用同一組單位尺寸（`CW/ROW` 常數），這樣不同圖的波形看起來一樣大。
+  ⚠️ 注意 `render()` 內的 `mm = min(178, round(W * 0.252))`：**寬度超過約 706 單位就會被
+  clamp**，那張圖的單位尺寸會比別張小。要一致就讓每張都待在 706 以內（減少 cycle 數，
+  或縮小 `CW`）。
+
+**匯流排一律照 datasheet 慣例畫，不可以畫成方框**（對標 ARM Artisan memory compiler
+的 timing 圖）：
+
+- 資料值之間用 **X 交叉**（兩條軌互換）表示切換，有效資料段是「`<` 值 `>`」的六角形，
+  **不是**兩端各一條垂直線的長方形。
+- 值不被在意的區間畫成**連續的 X 鏈**（don't care），不是留白也不是斜線底紋。
+- **圖的左右邊界不封口**：軌線直接跑到邊界為止。匯流排不會在那裡開始或結束，
+  是「圖」在那裡結束。同理，資料窗剛好切齊邊界時不畫交叉。
+- 這些都在 `_bus()` / `_cross()` / `_dontcare()` 裡，spec 只要給 `windows`
+  （`(起始 cycle, 結束 cycle, 標籤)`），沒被 window 蓋到的區間自動變成 don't care。
+- 時脈的斜率刻意做得很小（`SLEW`）。在這個 cell 寬度下真的照 AC timing 圖那樣斜，
+  會變成三角波。
 
 ### Block diagram（`scripts/blocks.py`）
 

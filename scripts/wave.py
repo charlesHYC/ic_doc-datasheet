@@ -4,10 +4,18 @@
 One renderer, three specs. A spec lists the visible cycle segments (anything
 between them is elided with a break), the signals, the phase bands across the
 top and the markers underneath.
+
+Buses follow the datasheet convention rather than being drawn as boxes: two
+rails with an X crossover wherever the value changes, a chain of crossovers
+where the value is a don't care, and no vertical cap where the waveform meets
+the edge of the figure - a bus does not begin or end there, the drawing does.
 """
 CW, LBL, GAP, ROW = 40, 94, 34, 54   # LBL must clear the longest signal name
 HI, LO = 0, 28
 TOP, FOOT = 60, 46
+XW, CELL = 5, 14        # crossover half-width; don't-care repeat pitch
+SLEW = 1.5              # clock rise and fall; a hint of it, no more - at this
+                        # cell width a real slew reads as a triangle wave
 
 
 def _mk(segments):
@@ -26,6 +34,67 @@ def _mk(segments):
     return x, [(s[2], s[2] + (s[1] - s[0] + 1) * CW) for s in starts], W
 
 
+def _rails(x0, x1, top, bot):
+    """The two horizontal edges of a bus, with no cap at either end."""
+    if x1 - x0 < 0.5:
+        return []
+    return ['<path d="M %.1f %.1f L %.1f %.1f M %.1f %.1f L %.1f %.1f" fill="none" '
+            'stroke="#000" stroke-width="1.15"/>' % (x0, top, x1, top, x0, bot, x1, bot)]
+
+
+def _cross(xc, top, bot):
+    """One value changing to the next: the rails swap over."""
+    return ['<path d="M %.1f %.1f L %.1f %.1f M %.1f %.1f L %.1f %.1f" fill="none" '
+            'stroke="#000" stroke-width="1.15"/>'
+            % (xc - XW, top, xc + XW, bot, xc - XW, bot, xc + XW, top)]
+
+
+def _dontcare(x0, x1, top, bot):
+    """A value that is not being relied on: rails filled with crossovers."""
+    if x1 - x0 < 1:
+        return []
+    o = _rails(x0, x1, top, bot)
+    n = max(1, int(round((x1 - x0) / CELL)))
+    step = (x1 - x0) / n
+    for k in range(n):
+        a, b = x0 + k * step, x0 + (k + 1) * step
+        o.append('<path d="M %.1f %.1f L %.1f %.1f M %.1f %.1f L %.1f %.1f" fill="none" '
+                 'stroke="#000" stroke-width="1.0"/>' % (a, top, b, bot, a, bot, b, top))
+    return o
+
+
+def _bus(a, b, wins, top, bot):
+    """One visible segment of a bus. `wins` is (x0, x1, text) in pixels.
+
+    A crossover is drawn only where a value actually changes; where a window
+    runs into the edge of the segment the rails simply continue, because the
+    bus does not stop there.
+    """
+    o, cur = [], a
+    for (wa, wb, txt) in sorted(wins):
+        wa, wb = max(wa, a), min(wb, b)
+        if wb <= wa:
+            continue
+        lcap, rcap = wa > a + 0.5, wb < b - 0.5
+        if wa - (XW if lcap else 0) > cur:
+            o += _dontcare(cur, wa - (XW if lcap else 0), top, bot)
+        if lcap:
+            o += _cross(wa, top, bot)
+        o += _rails(wa + (XW if lcap else 0), wb - (XW if rcap else 0), top, bot)
+        if rcap:
+            o += _cross(wb, top, bot)
+        if txt:
+            # a white halo, so a value sitting on a guide line stays readable
+            o.append('<text x="%.1f" y="%d" text-anchor="middle" font-size="12" '
+                     'stroke="#fff" stroke-width="3.2" paint-order="stroke">%s</text>'
+                     % ((wa + wb) / 2, top + 20, txt))
+        cur = wb + (XW if rcap else 0)
+    if cur < b:
+        o += _dontcare(cur, b, top, bot)
+    return o
+
+
+
 def render(spec):
     segs = spec['segments']
     x, bounds, W = _mk(segs)
@@ -38,11 +107,7 @@ def render(spec):
     mm = min(178, round(W * 0.252))          # same unit size in every figure
     o = ['<svg viewBox="0 0 %d %d" width="%dmm" role="img" aria-label="%s">'
          % (W, H, mm, spec['alt']),
-         '<defs><pattern id="dc%s" width="6" height="6" patternUnits="userSpaceOnUse">'
-         '<path d="M0,6 L6,0" stroke="#000" stroke-width="0.5"/></pattern></defs>'
-         % spec['id'],
          '<g font-family="Times New Roman, Times, serif" font-size="12">']
-    dc = 'url(#dc%s)' % spec['id']
 
     for i, s in enumerate(sig):
         o.append('<text x="%d" y="%d" text-anchor="end" font-size="13">%s</text>'
@@ -75,8 +140,11 @@ def render(spec):
             for seg in segs:
                 for c in seg:
                     a, m, e = x(c), x(c) + CW / 2, x(c) + CW
+                    # no trailing rise: the next cycle draws its own leading one,
+                    # and the last cycle of a segment must not overhang the edge
                     d.append("M %.1f %d L %.1f %d L %.1f %d L %.1f %d L %.1f %d"
-                             % (a, y(i) + LO, a, y(i) + HI, m, y(i) + HI, m, y(i) + LO,
+                             % (max(a - SLEW, x(seg[0])), y(i) + LO, a + SLEW, y(i) + HI,
+                                m - SLEW, y(i) + HI, m + SLEW, y(i) + LO,
                                 e, y(i) + LO))
             o.append('<path d="%s" fill="none" stroke="#000" stroke-width="1.3"/>' % " ".join(d))
         elif k == 'level':
@@ -91,26 +159,16 @@ def render(spec):
                 o.append('<path d="%s" fill="none" stroke="#000" stroke-width="1.3"/>'
                          % " ".join(d))
         elif k == 'bus':
+            top, bot = y(i) + HI, y(i) + LO
             for (a, b) in bounds:
-                o.append('<rect x="%.1f" y="%d" width="%.1f" height="%d" fill="%s" '
-                         'stroke="#000" stroke-width="0.7"/>' % (a, y(i) + HI, b - a, LO - HI, dc))
-            for (c0, c1, txt) in s['windows']:
-                o.append('<rect x="%.1f" y="%d" width="%.1f" height="%d" fill="#fff" '
-                         'stroke="#000" stroke-width="1.3"/>'
-                         % (x(c0), y(i) + HI, x(c1) - x(c0), LO - HI))
-                o.append('<text x="%.1f" y="%d" text-anchor="middle" font-size="12">%s</text>'
-                         % ((x(c0) + x(c1)) / 2, y(i) + HI + 20, txt))
+                o += _bus(a, b, [(x(c0), x(c1), t) for (c0, c1, t) in s['windows']],
+                          top, bot)
         elif k == 'beats':
             c0, c1, lab = s['from'], s['to'], s.get('label', 'D%d')
-            pre = [(a, b) for (a, b) in bounds if b <= x(c0)]
-            for (a, b) in pre:
-                o.append('<rect x="%.1f" y="%d" width="%.1f" height="%d" fill="%s" '
-                         'stroke="#000" stroke-width="0.7"/>' % (a, y(i) + HI, b - a, LO - HI, dc))
-            for n, c in enumerate(range(c0, c1)):
-                o.append('<rect x="%.1f" y="%d" width="%.1f" height="%d" fill="#fff" '
-                         'stroke="#000" stroke-width="1"/>' % (x(c), y(i) + HI, CW, LO - HI))
-                o.append('<text x="%.1f" y="%d" text-anchor="middle" font-size="11.5">%s</text>'
-                         % (x(c) + CW / 2, y(i) + HI + 20, lab % n))
+            top, bot = y(i) + HI, y(i) + LO
+            wins = [(x(c), x(c + 1), lab % n) for n, c in enumerate(range(c0, c1))]
+            for (a, b) in bounds:
+                o += _bus(a, b, wins, top, bot)
 
     yb = y(len(sig) - 1) + LO + 4
     for (c, txt) in spec.get('markers', []):
