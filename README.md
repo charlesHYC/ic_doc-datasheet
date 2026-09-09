@@ -24,7 +24,7 @@ Facts come out of the RTL; prose is written by hand. That split is the whole des
 
 Generating descriptions from RTL only ever produces `wr_go is the wr_go signal`, so the skill
 does not try. What it does automate is everything tedious and error-prone: resolving
-`[HBM_CH*ID_WIDTH-1:0]` into `[95:0]`, laying out symbols so no label is truncated, splitting a
+`[NUM_CH*ID_WIDTH-1:0]` into `[95:0]`, laying out symbols so no label is truncated, splitting a
 63-pin table across pages, and refusing to emit a PDF when a page does not actually fit A4.
 
 ## Install

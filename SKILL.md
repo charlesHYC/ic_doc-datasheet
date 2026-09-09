@@ -32,7 +32,7 @@ compiler 那種），但**不做 process corner 的細部參數表**。
 
 不要試圖從 RTL 自動生成描述文字，那只會產出「`wr_go` is the wr_go signal」這種廢話。
 **文字一律自己寫，而且要寫出「為什麼」**，例如「這些 register slice 不是裝飾品：少了它，
-從記憶體控制器到 write engine 的路徑會 miss timing 0.65 ns」。
+從記憶體控制器到 write engine 的路徑會 miss timing 半個 ns」。
 
 ## 事實一定要去核對，不要憑記憶
 
@@ -285,7 +285,7 @@ chromium / wkhtmltopdf / weasyprint，就只能自己來：`scripts/topdf.py` �
 `example/build.py` 是一份實際專案的組檔程式，**複製後改**是最快的起手式。它有一半是
 專案專屬的常數（`PROSE`、`CSR`、`LIB`、`FULL`），另一半是可直接沿用的：CSS（權威的
 字級與版面）、`symbol()`、`params_rows()` / `pins_rows()` / `wrap_rows()`、
-`resolve_params()`（把 `[HBM_CH*ID_WIDTH-1:0]` 這種算成 `[95:0]`，含 `$clog2`）、
+`resolve_params()`（把 `[NUM_CH*ID_WIDTH-1:0]` 這種算成 `[95:0]`，含 `$clog2`）、
 以及整套分頁邏輯。
 
 ⚠️ `example/build.py` 與 `scripts/blocks.py`、`scripts/wave.py` 裡的**模組名稱與資料流

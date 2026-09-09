@@ -2,7 +2,7 @@
 """Assemble the datasheet from modules.json plus the prose kept here.
 
 WORKED EXAMPLE. This is the real assembly script for a 29-page datasheet of
-a packet replay engine. Copy it into your own project directory
+a fictional example design. Copy it into your own project directory
 alongside the skill's scripts/ and edit the project-specific constants:
 
     DESIGN, PROSE, LIB, FULL, CSR, TIMING, and the cover page text
@@ -25,68 +25,57 @@ import wave as wavefig
 import paginate as pg
 
 # Output is named after the design, the way a compiler-generated datasheet is.
-DESIGN = 'hbm_run'
+DESIGN = 'example'
 OUT = 'datasheet_manual.html' if not DESIGN else '%s_datasheet_manual.html' % DESIGN
 
 MODS = {m['module']: m for m in json.load(open('modules.json'))}
 
+# Placeholder prose. Real entries are two paragraphs per module and say *why*,
+# not what: "these register slices are not decoration - without them the path
+# from the controller to the write engine misses timing" beats restating the
+# port list. Replace all of this with your own; a re-run never touches it.
 PROSE = {
  'read_path': (
-   "Streams the stored trace out of memory and onto the MAC. It owns all sixteen "
-   "channels and reads them through RD_LANES masters, each statically owning "
-   "MEM_CH / RD_LANES channels, so no arbitration is needed and two masters can "
-   "never drive the same channel.",
-   "A three-stage pipeline rebuilds each Ethernet frame from the 64-byte metadata "
-   "records. Pacing reproduces the recorded timestamps and gates only the final "
-   "stage, so prefetch continues while the engine waits to transmit. Every "
-   "runed record is copied to a capture buffer the host can read back."),
+   "Reads stored records back out of memory and turns them into an output stream. "
+   "Describe here what the block is for and what it owns, in the terms someone "
+   "reviewing the design would use.",
+   "Second paragraph is for the part that is not obvious from the port list: the "
+   "structural decision, and the reason behind it. Say what would go wrong if it "
+   "were done the other way."),
  'write_path': (
-   "The CSR face of the write path. It holds the control and status registers, "
-   "accepts placement descriptors from the host, and hands the actual transfer to "
-   "dma_engine.",
-   "Two modes share the same registers. Legacy mode issues one copy descriptor on "
-   "go, reproducing the original single-shot behaviour byte for byte. Descriptor "
-   "mode lets the host push a queue of segments first, each with its own address "
-   "and stride, and then start them as one run."),
+   "The register face of the write side: control and status registers, and the "
+   "hand-off to the engine that does the transfer.",
+   "Explain the modes or the sequencing the registers imply, and anything about "
+   "the order operations have to be issued in."),
  'dma_engine': (
-   "A self-contained engine that moves host memory into memory. It takes a copy "
-   "descriptor of {host address, memory address, length, tag} and returns a status "
-   "pulse; the data never passes through the application datapath.",
-   "Inside, a 32-slot ring scheduler keeps several batches in flight so PCIe "
-   "latency is hidden, a private psdpram stages the data, and axi_wr_master drives "
-   "one wide AXI write master that is then split across the sixteen memory ports."),
+   "Moves data from host memory into on-card memory. Takes a descriptor and "
+   "returns a status pulse.",
+   "Say what is inside and why that shape was chosen - what is being overlapped, "
+   "what latency is being hidden, where the buffering sits."),
  'axi_demux': (
-   "Routes one wide AXI write master to CH channel-local masters by slicing the "
-   "channel number straight out of the address. There is no address decode table: "
-   "awaddr[CH_OFFSET +: CH_BITS] is the channel, and the bits either side are the "
-   "local address.",
-   "W follows AW through a small FIFO so write data cannot overtake its address, "
-   "and B responses return round-robin with the ID passed through untouched."),
+   "Routes one wide write master to several channel-local masters.",
+   "Describe the routing rule and its consequences; if there is no decode table "
+   "because the address already carries the channel number, that is worth saying."),
  'axi_downsize': (
-   "Halves the width of an AXI write channel, converting AW length and size "
-   "together and splitting each wide beat into RATIO narrow ones. B passes "
-   "through.",
-   "Written rather than taken from the library because the library's adapter "
-   "computes its expansion inside a procedural branch; when the ratio makes it "
-   "zero-copy, VCS rejects it outright while Vivado tolerates it. At RATIO = 1 "
-   "this module degenerates to wires."),
+   "Converts an AXI write channel to half its width.",
+   "If the module exists because a library equivalent could not be used, say so "
+   "and why - that is exactly the kind of thing a reader cannot recover from the "
+   "code."),
  'soc_app_top': (
-   "The framework application block: the shell the whole design lives in. Its port "
-   "list is defined by the framework, which is why it is so large; only the CSR "
-   "slave, the memory masters and the TX stream matter here.",
-   "It instantiates the read and write paths, decodes the CSR register map, and "
-   "puts a register slice on every one of the sixteen memory ports. Those slices are "
-   "not cosmetic: without them the path from the memory controller to the write "
-   "engine misses timing by 0.65 ns."),
+   "The framework application block: the shell the design lives in. Its port list "
+   "is defined by the framework, which is why it is large.",
+   "Say what this level adds on top of the framework - which submodules it wires "
+   "together, what the register map decodes, and any per-port structure that "
+   "exists for timing rather than for function."),
 }
 
 LIB = [
  ('axi_wr_master', 'framework', 'Drives one AXI write master from segmented RAM. '
-  'Requires RAM width = 2 x AXI width, which is what fixes the internal bus at 512 bits.'),
- ('stage_ram', 'framework', 'Segmented pseudo dual-port RAM used as the private staging '
-  'buffer inside dma_engine.'),
- ('axis_fifo', 'verilog-axis', 'Per-lane record FIFO in the read path. With KEEP_ENABLE, '
-  'DEPTH is counted in bytes, not words.'),
+  'Note any width relationship it imposes on the rest of the design.'),
+ ('stage_ram', 'framework', 'Segmented pseudo dual-port RAM, used here as a private '
+  'staging buffer.'),
+ ('axis_fifo', 'verilog-axis', 'Record FIFO in the read path. With KEEP_ENABLE, DEPTH is '
+  'counted in bytes rather than words - a real trap worth writing down.'),
  ('axi_reg_rd', 'verilog-axi', 'Read-channel register slice, one per memory port.'),
  ('axi_reg_wr', 'verilog-axi', 'Write-channel register slice, one per memory port.'),
 ]
@@ -158,30 +147,24 @@ def esc(s):
 
 # Read off the AXI-Lite case decode in soc_app_top.v; the byte offset is the
 # 6-bit selector shifted left by two.
+# Placeholder register map. Read the real offsets off the AXI-Lite decode rather
+# than transcribing them, and keep the three access semantics distinct: a bit
+# that self-clears, a bit that is held for the duration, and a bit cleared by
+# the act of reading it. That distinction is the point of the table.
 CSR = [
- ('0x00', 'host_meta_base_lo', 'R/W', 'Host physical address of the trace, bits [31:0]'),
- ('0x04', 'host_meta_base_hi', 'R/W', 'Host physical address, bits [63:32]'),
- ('0x08', 'batch_total', 'R/W', 'Number of packets to transfer'),
- ('0x0C', 'wr_ctrl', 'W', 'bit[0] wr_go, self-clearing; bit[1] desc_mode, held'),
- ('0x10', 'wr_status', 'R', 'bit[0] wr_busy; bit[1] wr_done, cleared on read'),
- ('0x14', 'rd_ctrl', 'W', 'bit[0] run_go, self-clearing; bit[1] max_rate, held'),
- ('0x18', 'rd_status', 'R', 'bit[0] run_busy; bit[1] run_done, cleared on read; '
-                            'bit[2] placement_unsupported'),
- ('0x1C', 'debug_state', 'R', 'dbg_stall[5:0]: active, ring credit, NIC desc, PCIe fill, '
-                              'op table full, engine busy'),
+ ('0x00', 'src_addr_lo', 'R/W', 'Source address, bits [31:0]'),
+ ('0x04', 'src_addr_hi', 'R/W', 'Source address, bits [63:32]'),
+ ('0x08', 'length', 'R/W', 'Transfer length'),
+ ('0x0C', 'wr_ctrl', 'W', 'bit[0] go, self-clearing; bit[1] mode, held'),
+ ('0x10', 'wr_status', 'R', 'bit[0] busy; bit[1] done, cleared on read'),
+ ('0x14', 'rd_ctrl', 'W', 'bit[0] go, self-clearing; bit[1] free_run, held'),
+ ('0x18', 'rd_status', 'R', 'bit[0] busy; bit[1] done, cleared on read; '
+                            'bit[2] config_unsupported'),
+ ('0x1C', 'debug_state', 'R', 'Per-source stall flags, one bit each'),
  ('0x20', 'cap_count', 'R', 'Records captured this run, at most CAP_DEPTH'),
  ('0x24', 'cap_word_addr', 'R/W', 'Readback word index: record = addr &gt;&gt; 4'),
  ('0x28', 'cap_rdata', 'R', 'The word at cap_word_addr, registered'),
- ('0x30', 'desc_dma_addr_lo', 'R/W', 'Descriptor: host source address, bits [31:0]'),
- ('0x34', 'desc_dma_addr_hi', 'R/W', 'Descriptor: host source address, bits [63:32]'),
- ('0x38', 'desc_hbm_addr', 'R/W', 'Descriptor: flat memory address of the first batch'),
- ('0x3C', 'desc_len', 'R/W', 'Descriptor: bytes covered, rounded up to whole batches'),
- ('0x40', 'desc_ctrl', 'W', 'bits[4:0] stride_log2; bit[8] push, a pulse; bit[9] clear, a pulse'),
- ('0x44', 'desc_status', 'R', 'bit[0] full; bit[1] empty; bits[23:16] queue level; '
-                              'bits[31:24] descriptors completed this run'),
- ('0x48', 'rd_placement', 'R/W', 'bits[4:0] read-side stride_log2, resets to 9; '
-                                 'on read bit[5] is placement_unsupported'),
- ('0x4C', 'run_cycles', 'R', 'Measured run length in 250 MHz cycles'),
+ ('0x2C', 'run_cycles', 'R', 'Measured run length, in clock cycles'),
 ]
 
 
@@ -353,19 +336,19 @@ def hierarchy():
     box(6, 6, W - 12, 342, 'soc_app_top', 'framework application shell', True, 18, 12)
 
     # ---- write path -> dma_engine -> four children ---------------------
-    box(20, 54, 308, 280, 'write_path', 'CSR registers, placement descriptors',
+    box(20, 54, 308, 280, 'write_path', 'control and status registers',
         True, 15, 11.5)
-    box(34, 102, 280, 220, 'dma_engine', 'host memory to memory, ring scheduler', True, 14, 11)
+    box(34, 102, 280, 220, 'dma_engine', 'host memory to on-card memory', True, 14, 11)
     kids = [('stage_ram', 'staging RAM', False),
             ('axi_wr_master', 'AXI write master', False),
-            ('axi_demux', 'one master to 16 channels', True),
-            ('axi_downsize', '512 to 256 bit, x16', True)]
+            ('axi_demux', 'one master to N channels', True),
+            ('axi_downsize', 'width conversion, one per channel', True)]
     for i, (n, note, own) in enumerate(kids):
         box(48, 148 + i * 42, 252, 36, n, note, own, 12.5, 10)
 
     # ---- read path -----------------------------------------------------
-    box(342, 54, 196, 152, 'read_path', 'memory to the MAC', True, 15, 11.5)
-    box(356, 108, 168, 36, 'axis_fifo', 'record FIFO, x2', False, 12.5, 10)
+    box(342, 54, 196, 152, 'read_path', 'memory to the output stream', True, 15, 11.5)
+    box(356, 108, 168, 36, 'axis_fifo', 'record FIFO, one per lane', False, 12.5, 10)
     o.append('<text x="356" y="172" font-size="11" fill="#3a3a3a">8 read masters,</text>')
     o.append('<text x="356" y="188" font-size="11" fill="#3a3a3a">2 channels each</text>')
 
@@ -382,10 +365,10 @@ def hierarchy():
              'orient="auto"><polygon points="0 0, 9 4, 0 8" fill="#000"/></marker></defs>')
     o.append('<line x1="140" y1="380" x2="140" y2="354" stroke="#000" stroke-width="1.5" '
              'marker-end="url(#hh)"/>')
-    o.append('<text x="154" y="376" font-size="13">host memory in, over PCIe</text>')
+    o.append('<text x="154" y="376" font-size="13">data in, from the host</text>')
     o.append('<line x1="440" y1="354" x2="440" y2="380" stroke="#000" stroke-width="1.5" '
              'marker-end="url(#hh)"/>')
-    o.append('<text x="454" y="376" font-size="13">frames out, to the 100G MAC</text>')
+    o.append('<text x="454" y="376" font-size="13">records out, to the sink</text>')
 
     return ('<svg viewBox="0 0 %d 394" width="100%%" role="img" '
             'aria-label="Module hierarchy drawn by containment">'
@@ -474,17 +457,17 @@ page("""
   <div class="titles">
     <div>Example Design Module Reference</div>
     <div>Module Reference &mdash; 6 RTL modules, 5 library modules</div>
-    <div>Example FPGA &middot; external memory &middot; 250 MHz single clock domain</div>
+    <div>Example FPGA &middot; on-card memory &middot; single clock domain</div>
   </div>
   <div class="rule"></div>
 
   <div class="band"><h2>Overview</h2><div>
-    <p>The engine stores a recorded packet trace in external memory on the card and
-    runs it onto a 100 Gbps MAC, either preserving the captured inter-packet timing or
-    running as fast as the wire allows. The host is not in the transmit path.</p>
-    <p>Everything runs in one 250 MHz domain, so there is no clock crossing anywhere in the
-    design. This reference covers each RTL module in turn: what it does, its parameters, its
-    symbol, and every port. Parameters and ports are read from the sources, not transcribed.</p>
+    <p>Placeholder overview. Say what the design does in two or three sentences,
+    in the terms someone deciding whether to read further would use, and be
+    specific about what is and is not in the datapath.</p>
+    <p>Then the one structural fact that shapes everything else - a single clock
+    domain, a fixed latency, a width that everything is built around. Parameters
+    and ports in this document are read from the sources, not transcribed.</p>
   </div></div>
 
   <div class="band wide"><h2>Hierarchy</h2>
@@ -502,7 +485,7 @@ page("""
     <figure><div class="fig-center fig-wide">%s</div>
     <figcaption>How the modules are wired to one another, following the data rather than the
     hierarchy. Shaded frames are the two engines; the column on the left is the control path
-    from CSR. The same sixteen memory channels appear once, between the write path above and the
+    from CSR. The memory channels appear once, between the write path above and the
     read path below.</figcaption></figure>
   </div>
 """ % blockfig.render(), 3)
@@ -590,28 +573,29 @@ page("""
 n_page += 1
 
 # --- timing ---
+# Placeholder captions. A caption says what the figure shows, what the reader
+# should notice in it, and which capture it came from - the last part is not
+# optional, because a waveform nobody can trace back to a run is decoration.
 TIMING = [
  ('Read burst', 'read_path', wavefig.READ,
-  'One read master holds <span class="mono">araddr</span> while '
-  '<span class="mono">arvalid</span> is asserted, waits out the fixed memory latency, then takes '
-  'sixteen beats back to back with <span class="mono">rready</span> already high. From '
-  '<span class="mono">tb_read_latency.vcd</span>; the twenty-six idle cycles are elided.'),
+  'The master holds <span class="mono">araddr</span> while '
+  '<span class="mono">arvalid</span> is asserted, waits out the fixed memory latency, then '
+  'takes the burst back to back with <span class="mono">rready</span> already high. From '
+  '<span class="mono">tb_read.vcd</span>; the idle cycles in the middle are elided.'),
  ('Write burst into one channel', 'axi_demux, axi_downsize', wavefig.WRITE,
-  'The demux routes the address to the channel named by <span class="mono">awaddr</span>, and W '
-  'follows it. Sixteen beats then <span class="mono">wlast</span>, and the response comes back a '
-  'few cycles later. From <span class="mono">tb_dma_engine.vcd</span>, channel 0.'),
- ('Placement descriptors', 'write_path', wavefig.DESC,
-  'The host pushes its placement plan one segment at a time. Each descriptor carries the memory '
-  'address the segment starts at and the stride between its 512-byte batches; the engine takes '
-  'the next one only when the previous segment has been copied. From '
-  '<span class="mono">tb_dma_engine.vcd</span>, the per-channel placement run, where stride '
-  '13 keeps each segment inside one channel.'),
- ('Copy descriptor and host fetch', 'dma_engine', wavefig.CTRL,
-  'A copy descriptor is accepted in one cycle, after which the engine issues read descriptors to '
-  'the NIC and completions begin landing in the private RAM. '
-  '<span class="mono">rdd_ready</span> gaps are the NIC pushing back. From '
-  '<span class="mono">tb_dma_engine.vcd</span>.'),
+  'The demux routes the address to one channel and W follows it. The beats go out, then '
+  '<span class="mono">wlast</span>, and the response returns a few cycles later. From '
+  '<span class="mono">tb_write.vcd</span>.'),
+ ('Descriptor push', 'write_path', wavefig.DESC,
+  'The host pushes one descriptor at a time and the engine takes the next only when the '
+  'previous one has been copied. From <span class="mono">tb_write.vcd</span>.'),
+ ('Descriptor accepted, data fetched', 'dma_engine', wavefig.CTRL,
+  'A descriptor is accepted in one cycle, after which the engine issues its own read '
+  'requests and data begins landing in the private RAM. Gaps in '
+  '<span class="mono">rdd_ready</span> are the source pushing back. From '
+  '<span class="mono">tb_dma.vcd</span>.'),
 ]
+
 
 # pack as many waveforms per page as actually fit
 blocks = []

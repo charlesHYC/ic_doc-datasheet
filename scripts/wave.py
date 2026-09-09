@@ -181,9 +181,9 @@ def render(spec):
 
 # ---------------------------------------------------------------- specs
 READ = {
- 'id': 'r', 'alt': 'Read burst: address, elided memory latency, then sixteen beats',
+ 'id': 'r', 'alt': 'Read burst: address, elided memory latency, then the data beats',
  'segments': [list(range(0, 5)), list(range(26, 32))],
- 'bands': [(0, 2, 'address', False), (2, 26, 'memory read latency, 26 cycles', True),
+ 'bands': [(0, 2, 'address', False), (2, 26, 'memory read latency', True),
            (26, 32, 'data burst, 16 beats', False)],
  'guides': [2, 26], 'markers': [(2, 'AR accepted'), (26, 'first beat')],
  'signals': [
@@ -199,9 +199,9 @@ READ = {
  ]}
 
 WRITE = {
- 'id': 'w', 'alt': 'Write burst into one memory channel, sixteen beats then the response',
+ 'id': 'w', 'alt': 'Write burst into one memory channel, then the response',
  'segments': [list(range(0, 6)), list(range(17, 24))],
- 'bands': [(0, 3, 'address', False), (3, 20, 'sixteen data beats', False),
+ 'bands': [(0, 3, 'address', False), (3, 20, 'data beats', False),
            (20, 24, 'response', True)],
  'guides': [3, 20], 'markers': [(3, 'first beat'), (20, 'wlast')],
  'signals': [
@@ -238,9 +238,9 @@ CTRL = {
 
 
 DESC = {
- 'id': 'd', 'alt': 'Placement descriptors handed over one segment at a time',
+ 'id': 'd', 'alt': 'Descriptors handed over one segment at a time',
  'segments': [list(range(0, 6)), list(range(260, 267))],
- 'bands': [(0, 2, 'descriptor 0', False), (2, 260, 'segment copied into memory', True),
+ 'bands': [(0, 2, 'descriptor 0', False), (2, 260, 'segment copied', True),
            (260, 267, 'descriptor 1', False)],
  'guides': [2, 260], 'markers': [(2, 'accepted'), (262, 'accepted')],
  'signals': [
@@ -250,8 +250,8 @@ DESC = {
               [(260, 261, 0), (261, 262, 1), (262, 267, 0)]]},
    {'name': 'desc_ready', 'kind': 'level',
     'spans': [[(0, 2, 1), (2, 6, 0)], [(260, 262, 1), (262, 267, 0)]]},
-   {'name': 'hbm_addr', 'kind': 'bus', 'windows': [(1, 3, '0x0000'), (261, 264, '0x0200')]},
-   {'name': 'stride_log2', 'kind': 'bus', 'windows': [(1, 3, '13'), (261, 264, '13')]},
+   {'name': 'mem_addr', 'kind': 'bus', 'windows': [(1, 3, '0x0000'), (261, 264, '0x0200')]},
+   {'name': 'seg_stride', 'kind': 'bus', 'windows': [(1, 3, '0x200'), (261, 264, '0x200')]},
    {'name': 'wr_busy', 'kind': 'level', 'spans': [[(0, 1, 0), (1, 6, 1)], [(260, 267, 1)]]},
  ]}
 

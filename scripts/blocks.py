@@ -2,8 +2,8 @@
 """Connectivity diagram: how the modules are wired to each other.
 
 Distinct from the hierarchy figure, which shows containment. This one follows
-the data: host memory down through the write path into memory, back up through the
-read path and out to the MAC, with the CSR control bus off to the side.
+the data: host memory down through the write path into on-card memory, back up
+through the read path and out, with the control bus off to the side.
 
 Layout runs in two passes: place the blocks, then draw the group frames around
 whatever they turned out to occupy, so a frame can never miss its contents.
@@ -62,50 +62,50 @@ def render():
     L = Layout()
 
     L.block('host memory', '', '#f4f2ee', h=34)
-    L.arrow('PCIe')
+    L.arrow('host link')
 
     # ---- write path ----------------------------------------------------
     g0 = L.y
     L.y += 36                                    # room for the group title
     L.block('stage_ram', 'private staging RAM', inset=8)
     L.arrow('completions', GAP_IN)
-    L.block('axi_wr_master', 'one 512-bit AXI master', inset=8)
-    L.arrow('512-bit', GAP_IN)
-    L.block('axi_demux', 'awaddr[12:9] picks the channel', inset=8)
-    L.arrow('16 x 512-bit', GAP_IN)
-    L.block('axi_downsize', 'x16, 512 to 256 bit', inset=8)
+    L.block('axi_wr_master', 'one wide AXI master', inset=8)
+    L.arrow('wide', GAP_IN)
+    L.block('axi_demux', 'the address names the channel', inset=8)
+    L.arrow('N x wide', GAP_IN)
+    L.block('axi_downsize', 'xN, half the width', inset=8)
     L.y += 12
     g1 = L.y
-    L.group(g0, g1, 'dma_engine', 'ring scheduler, 32 slots in flight')
+    L.group(g0, g1, 'dma_engine', 'ring scheduler, several in flight')
 
-    L.arrow('16 x 256-bit')
-    L.block('axi_reg_wr', 'x16, cuts the path to the memory controller', h=38)
+    L.arrow('N x narrow')
+    L.block('axi_reg_wr', 'xN, cuts the path to the controller', h=38)
     L.arrow()
 
-    L.block('Memory, 16 channels', 'batch N lands in channel N mod 16', '#ddd9d2', '1.8')
+    L.block('On-card memory, N channels', 'the address decides the channel', '#ddd9d2', '1.8')
     L.arrow()
-    L.block('axi_reg_rd', 'x16', h=38)
-    L.arrow('16 x 256-bit')
+    L.block('axi_reg_rd', 'xN', h=38)
+    L.arrow('N x narrow')
 
     # ---- read path -------------------------------------------------------
     g2 = L.y
     L.y += 30
-    L.block('8 AXI read masters', 'two channels each, no arbitration', inset=8)
+    L.block('AXI read masters', 'a fixed channel each, no arbitration', inset=8)
     L.arrow('', GAP_IN)
-    L.block('axis_fifo x8', 'one 64-byte record per word', inset=8)
+    L.block('axis_fifo xN', 'one record per word', inset=8)
     L.arrow('', GAP_IN)
     L.block('Fetch / Pace / TX', 'three-stage pipeline', inset=8)
     L.y += 12
     g3 = L.y
     L.group(g2, g3, 'read_path')
 
-    L.arrow('512-bit AXIS')
-    L.block('100G MAC', '', '#f4f2ee', h=34)
+    L.arrow('output stream')
+    L.block('sink', '', '#f4f2ee', h=34)
     H = L.y + 12
 
     # ---- control column ---------------------------------------------------
     L.rect(CX, 108, CW_, 32)
-    L.txt(CX + CW_ / 2, 128, 'CSR AXI-Lite', 12)
+    L.txt(CX + CW_ / 2, 128, 'control bus', 12)
     L.rect(CX, 166, CW_, 48, '#eeece8', '1.3')
     L.txt(CX + CW_ / 2, 186, 'write', 11.5, weight='bold')
     L.txt(CX + CW_ / 2, 201, '_path_v2', 11.5, weight='bold')
