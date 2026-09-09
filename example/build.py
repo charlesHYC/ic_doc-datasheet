@@ -490,6 +490,27 @@ page("""
   </div>
 """ % blockfig.render(), 3)
 
+def paged_table(lead, lead_px, title, thead, rows, n):
+    """Put `lead` on a page and as much of the table under it as fits.
+
+    pg.chunk hands back an empty opening list when nothing fits beside the lead;
+    that means the lead gets the page to itself and the table starts on the next
+    one, rather than being forced on top and pushing the page over A4.
+    """
+    head_px = pg.BAND_PX + pg.THEAD_PX
+    parts = pg.chunk(rows, pg.body_px(head_px), first=pg.body_px(lead_px + head_px))
+    total, k = sum(1 for p in parts if p), 0
+    for i, part in enumerate(parts):
+        band = ''
+        if part:
+            k += 1
+            t = title if total < 2 else '%s (%d of %d)' % (title, k, total)
+            band = '  <div class="band wide"><h2>%s</h2>%s</div>' % (t, wrap_rows(thead, part))
+        page(((lead + "\n\n") if i == 0 else '') + band, n)
+        n += 1
+    return n
+
+
 # --- one page per full module, split whenever a page would not fit A4 ---
 n_page = 4
 SYM_CAP = ('Families of related AXI signals are drawn as one bundle; the pin table below '
@@ -512,14 +533,7 @@ for name in FULL:
 
     # Parameters: as much as fits under the description, the rest on its own page
     thead, rows = params_rows(m)
-    head_px = pg.BAND_PX + pg.THEAD_PX
-    parts = pg.chunk(rows, pg.body_px(head_px),
-                     first=pg.body_px(desc_px + head_px))
-    for k, part in enumerate(parts):
-        title = 'Parameters' if k == 0 else 'Parameters (cont.)'
-        band = '  <div class="band wide"><h2>%s</h2>%s</div>' % (title, wrap_rows(thead, part))
-        page((desc + "\n\n" + band) if k == 0 else band, n_page)
-        n_page += 1
+    n_page = paged_table(desc, desc_px, 'Parameters', thead, rows, n_page)
 
     # Symbol: never split, so it opens a page and the pin table fills the rest
     sym = symbol(m)
@@ -530,15 +544,7 @@ for name in FULL:
     sym_px = pg.BAND_PX + pg.svg_px(sym, width_mm=158) + pg.caption_px(SYM_CAP)
 
     thead, rows = pins_rows(m)
-    parts = pg.chunk(rows, pg.body_px(head_px),
-                     first=pg.body_px(sym_px + head_px))
-    for k, part in enumerate(parts):
-        title = '%s &mdash; pins' % name
-        if len(parts) > 1:
-            title += ' (%d of %d)' % (k + 1, len(parts))
-        band = '  <div class="band wide"><h2>%s</h2>%s</div>' % (title, wrap_rows(thead, part))
-        page((sym_html + "\n\n" + band) if k == 0 else band, n_page)
-        n_page += 1
+    n_page = paged_table(sym_html, sym_px, '%s &mdash; pins' % name, thead, rows, n_page)
 
 # --- shell + library ---
 sh = MODS['soc_app_top']

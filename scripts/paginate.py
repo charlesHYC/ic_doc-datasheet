@@ -74,10 +74,24 @@ def chunk(items, budget, first=None):
 
     `first` overrides the budget of the opening chunk, for a page that also
     carries a title or a preceding band.
+
+    Two cases have to be told apart, and conflating them is how a page ends up
+    over A4 with nothing to show for it:
+
+    * An item too tall for `budget` itself is admitted anyway. Refusing it would
+      either drop content or spin forever, so it goes on a page of its own and
+      that page overflows - which is what `topdf.py --check` is there to catch.
+    * An item that only fails against a reduced `first` is a different thing: it
+      fits on a page, just not on *this* one. It goes to the next chunk, and the
+      opening list comes back **empty**.
+
+    So a caller passing `first` must expect `out[0]` to be empty, and read that
+    as "nothing can share the page with whatever `first` was reserved for".
     """
-    out, cur, used, cap = [], [], 0, first if first is not None else budget
+    out, cur, used = [], [], 0
+    cap = budget if first is None else first
     for html, px in items:
-        if cur and used + px > cap:
+        if used + px > cap and (cur or px <= budget):
             out.append(cur)
             cur, used, cap = [], 0, budget
         cur.append(html)
