@@ -16,6 +16,9 @@ TOP, FOOT = 60, 46
 XW, CELL = 5, 14        # crossover half-width; don't-care repeat pitch
 SLEW = 1.5              # clock rise and fall; a hint of it, no more - at this
                         # cell width a real slew reads as a triangle wave
+UNIT_MM = 0.252         # mm per viewBox unit, the same in every figure: that is
+                        # what makes one cycle the same width on any two pages
+COL_MM = 178            # the content column a figure has to fit inside
 
 
 def _mk(segments):
@@ -32,6 +35,30 @@ def _mk(segments):
                 return x0 + (c - lo) * CW
         return starts[-1][2] + (c - starts[-1][0]) * CW
     return x, [(s[2], s[2] + (s[1] - s[0] + 1) * CW) for s in starts], W
+
+
+def _fig_mm(W, spec):
+    """Figure width in mm at the shared unit size, or a refusal.
+
+    Clamping a too-wide figure to the column is the tempting fix and the wrong
+    one: the figure survives, but at a smaller unit size than every other
+    figure, so the same cycle is drawn two different widths in one document and
+    nothing says why. Refuse, and name what to do about it.
+    """
+    mm = W * UNIT_MM
+    if mm <= COL_MM:
+        return round(mm)
+    if spec.get('shrink'):
+        return COL_MM
+    drop = int(-(-(mm - COL_MM) // (CW * UNIT_MM)))
+    raise ValueError(
+        "waveform %r is %.0f mm wide at the shared unit size and the column is "
+        "%d mm. Show %d fewer cycle%s, break the segments up further, or lower "
+        "CW for every figure. Setting 'shrink': True in the spec accepts a "
+        "smaller unit size for this one instead, at the cost of it no longer "
+        "matching the others."
+        % (spec.get('id', '?'), mm, COL_MM, drop, '' if drop == 1 else 's'))
+
 
 
 def _rails(x0, x1, top, bot):
@@ -104,7 +131,7 @@ def render(spec):
     def y(i):
         return TOP + i * ROW
 
-    mm = min(178, round(W * 0.252))          # same unit size in every figure
+    mm = _fig_mm(W, spec)
     o = ['<svg viewBox="0 0 %d %d" width="%dmm" role="img" aria-label="%s">'
          % (W, H, mm, spec['alt']),
          '<g font-family="Times New Roman, Times, serif" font-size="12">']

@@ -8,6 +8,10 @@ CSS transform scale and the pages are stitched into a PDF. Scaling with a
 transform rather than a zoom keeps the layout byte-identical to what was
 verified on screen; only the rasteriser runs at a higher resolution.
 
+`--png` writes individual pages as PNGs instead, for the visual check. Each
+page is rendered on its own with its margins removed, so there is nothing to
+crop and no page-pitch arithmetic to get wrong.
+
 Before converting, every page is measured against A4. `min-height:297mm` on
 .page is a *minimum*: a page with too much content silently grows taller and
 looks perfectly fine stacked on screen, but will not fit a sheet of paper.
@@ -120,6 +124,28 @@ def to_a4(png, scale):
     return sheet
 
 
+def page_numbers(spec, total):
+    """Parse "1,3,7-9" into page numbers, or all of them for "all"/empty."""
+    if not spec or spec == 'all':
+        return list(range(1, total + 1))
+    out = []
+    for part in spec.split(','):
+        part = part.strip()
+        if not part:
+            continue
+        if '-' in part:
+            a, b = part.split('-', 1)
+            out += list(range(int(a), int(b) + 1))
+        else:
+            out.append(int(part))
+    bad = [n for n in out if not 1 <= n <= total]
+    if bad:
+        sys.exit('no such page: %s (the document has %d)'
+                 % (', '.join(map(str, bad)), total))
+    return sorted(set(out))
+
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('html')
@@ -129,6 +155,9 @@ def main():
     ap.add_argument('--check', action='store_true', help='measure the pages and stop')
     ap.add_argument('--force', action='store_true',
                     help='convert even if a page overflows; the overflow is cropped')
+    ap.add_argument('--png', nargs='?', const='all', metavar='PAGES',
+                    help='write PNGs instead of a PDF: "all", or "1,3,7-9". '
+                         'Each page is rendered on its own, so nothing has to be cropped')
     a = ap.parse_args()
 
     out = a.out or re.sub(r'\.html?$', '', a.html) + '.pdf'
@@ -156,6 +185,14 @@ def main():
         elif not a.check:
             print('  all %d pages fit A4' % len(pages))
         if a.check:
+            return
+
+        if a.png:
+            stem = re.sub(r'\.html?$', '', a.html)
+            for n in page_numbers(a.png, len(pages)):
+                png = '%s_page%02d.png' % (stem, n)
+                shoot(pages[n - 1], prelude, a.scale, png, work)
+                print('  %s' % png)
             return
 
         print('rendering at %gx (%d dpi)' % (a.scale, round(96 * a.scale)))

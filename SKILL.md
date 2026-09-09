@@ -167,9 +167,9 @@ compiler 那種），但**不做 process corner 的細部參數表**。
 - **說明文字寫在 HTML 的 `<figcaption>`，不要寫進 SVG**——SVG 的 text 不會自動換行，
   一定會衝出右邊界。
 - 每張圖用同一組單位尺寸（`CW/ROW` 常數），這樣不同圖的波形看起來一樣大。
-  ⚠️ 注意 `render()` 內的 `mm = min(178, round(W * 0.252))`：**寬度超過約 706 單位就會被
-  clamp**，那張圖的單位尺寸會比別張小。要一致就讓每張都待在 706 以內（減少 cycle 數，
-  或縮小 `CW`）。
+  單位尺寸是 `UNIT_MM`，欄寬是 `COL_MM`。圖太寬時 `render()` 會**直接報錯**並告訴你要
+  砍掉幾個 cycle——不會默默把它縮小，因為縮小之後那張圖的一個 cycle 會比別張窄，
+  而沒有任何地方說得出為什麼。真的要接受縮小就在 spec 裡加 `'shrink': True`。
 
 **匯流排一律照 datasheet 慣例畫，不可以畫成方框**（對標 ARM Artisan memory compiler
 的 timing 圖）：
@@ -195,23 +195,31 @@ compiler 那種），但**不做 process corner 的細部參數表**。
 
 ## 驗證迴圈（不可跳過）
 
-改完圖一定要看過再回報。
+改完圖一定要看過再回報。**用 `topdf.py --png`**，它會把每一頁單獨渲染成一張 A4 尺寸的
+PNG（`<design>_datasheet_manual_pageNN.png`）：
 
 ```sh
-WD=$PWD    # --screenshot 一定要絕對路徑
-MOZ_HEADLESS=1 timeout 300 firefox --headless \
-  --screenshot "$WD/out.png" --window-size=1000,3000 \
-  "file://$WD/<design>_datasheet_manual.html"
-python3 -c "from PIL import Image; Image.open('$WD/out.png').crop((x0,y0,x1,y1)).save('$WD/c.png')"
+python3 scripts/topdf.py <design>_datasheet_manual.html --png          # 全部
+python3 scripts/topdf.py <design>_datasheet_manual.html --png 3,7-9    # 指定頁
+python3 scripts/topdf.py <design>_datasheet_manual.html --png 3 --scale 2   # 放大看細節
 ```
-
-⚠️ **`--screenshot` 給相對路徑時 firefox 不會報錯，也不會產生檔案。** 一律用絕對路徑。
 
 然後把 PNG 看過。要檢查：文字有沒有被切掉、標籤有沒有壓到線、外框有沒有包住內容、
 分頁有沒有把表格切斷。
 
-Firefox 截圖在文件很長時會截斷（約 32767 px 上限），這時把單張圖獨立渲染成一個
-小 HTML 再截。
+⚠️ **不要自己截整份文件再裁**。那是行不通的：相鄰 `.page` 的上下 margin 會**塌陷**成
+一個 10 mm 間隙，所以頁距是 `1123 + 38` 而不是 `1123 + 76`，猜錯會逐頁累積偏移、
+把標題切掉，而且你不會發現，只會覺得「這頁怎麼怪怪的」。Firefox 截圖也有約 32767 px
+的高度上限，長文件本來就截不完。`--png` 是單獨渲染每一頁、且把 margin 設為 0，
+沒有任何座標要算。
+
+單獨看一張 SVG（還沒進 datasheet 之前）才需要自己截圖，這時：
+
+```sh
+WD=$PWD    # --screenshot 給相對路徑時 firefox 不報錯，也不產生檔案
+MOZ_HEADLESS=1 timeout 200 firefox --headless \
+  --screenshot "$WD/one.png" --window-size=800,400 "file://$WD/one.html"
+```
 
 ---
 
@@ -282,7 +290,7 @@ chromium / wkhtmltopdf / weasyprint，就只能自己來：`scripts/topdf.py` �
 |---|---|
 | `scripts/extract.py` | ✅ 完全通用，Verilog-95 與 Verilog-2001 header 都支援 |
 | `scripts/paginate.py` | ✅ 完全通用。高度估算，讓 `build.py` 在超出前就把表格拆頁 |
-| `scripts/topdf.py` | ✅ 完全通用。轉 PDF，並在轉檔前檢查每頁是否真的放得進 A4 |
+| `scripts/topdf.py` | ✅ 完全通用。轉 PDF、`--check` 驗每頁放不放得進 A4、`--png` 逐頁出圖給人看 |
 | `scripts/wave.py` | renderer 通用；每張波形的 spec（哪些 cycle、哪些訊號）要照專案手寫 |
 | `scripts/blocks.py` | 版面邏輯通用；資料流順序要照專案改 |
 
