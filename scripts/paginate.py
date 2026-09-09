@@ -57,14 +57,22 @@ def svg_px(svg, width_mm=None):
     Pass width_mm for a figure sized by CSS rather than by its own attribute -
     a symbol carries width="100%" and is capped by `.fig-sym svg{max-width}`,
     so its rendered width comes from the stylesheet, not the markup.
+
+    Anything it cannot measure is an error, not a zero. A figure estimated at no
+    height is the worst outcome available: the page is built as though a third
+    of it were empty, looks right on screen, and is wrong on paper.
     """
-    vb = re.search(r'viewBox="[-\d.]+ [-\d.]+ ([\d.]+) ([\d.]+)"', svg)
+    vb = re.search(r'viewBox="\s*[-\d.]+[,\s]+[-\d.]+[,\s]+([\d.]+)[,\s]+([\d.]+)\s*"', svg)
     if not vb:
-        return 0
+        raise ValueError('svg_px: no viewBox here, so there is no aspect ratio to '
+                         'work from. Is this an SVG?')
     if width_mm is None:
         w = re.search(r'width="([\d.]+)mm"', svg)
         if not w:
-            return 0
+            raise ValueError(
+                'svg_px: this SVG has no width="Nmm", so its rendered width is '
+                'decided by the stylesheet and has to be passed in. A symbol is '
+                'capped by .fig-sym svg{max-width:158mm}, so: svg_px(sym, width_mm=158)')
         width_mm = float(w.group(1))
     return width_mm * MM * float(vb.group(2)) / float(vb.group(1))
 

@@ -59,7 +59,11 @@ python3 scripts/extract.py rtl/a.v rtl/b.v > modules.json
 # 2. Assemble the HTML (start from example/build.py and edit PROSE)
 python3 build.py
 
-# 3. Check every page really fits A4, then convert
+# 3. Look at the pages. Each one is rendered on its own, so there is nothing
+#    to crop; a page that overflows is shown at its real height.
+python3 scripts/topdf.py my_design_datasheet_manual.html --png 1,3-5
+
+# 4. Check every page really fits A4, then convert
 python3 scripts/topdf.py my_design_datasheet_manual.html --check
 python3 scripts/topdf.py my_design_datasheet_manual.html
 ```

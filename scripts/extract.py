@@ -19,13 +19,16 @@ import sys
 IDENT = r'[A-Za-z_][A-Za-z_0-9$]*'
 
 BANNER = re.compile(r'^\s*//\s*[-=]{3,}\s*$')
+# One declaration may carry several names and each may have an initialiser:
+#   input wire [7:0] a, b,        output reg ready = 1'b0,
 PORT = re.compile(r"""^\s*
     (?P<dir>input|output|inout)\b\s*
     (?:(?P<net>wire|reg|logic)\b\s*)?
     (?:(?:signed|unsigned)\b\s*)?
     (?P<width>\[[^\]]*\]\s*)?
-    (?P<name>[A-Za-z_][A-Za-z_0-9$]*)
-    \s*(?:,\s*)?$""", re.X)
+    (?P<names>[A-Za-z_][A-Za-z_0-9$]*\s*(?:=[^,]+)?
+              (?:,\s*[A-Za-z_][A-Za-z_0-9$]*\s*(?:=[^,]+)?)*)
+    \s*,?\s*$""", re.X)
 PARAM = re.compile(r"""^\s*parameter\b\s*
     (?:(?P<type>integer|real|signed|\[[^\]]*\])\s*)?
     (?P<name>[A-Za-z_][A-Za-z_0-9$]*)\s*=\s*
@@ -204,6 +207,76 @@ def nonansi_params(body, bline):
     return out
 
 
+def port_names(names):
+    """The names in one declaration, with any initialiser dropped."""
+    out = []
+    for part in names.split(','):
+        part = part.split('=', 1)[0].strip()
+        if part:
+            out.append(part)
+    return out
+
+
+def top_level_groups(b):
+    """(start, end) of each parenthesised group at depth zero."""
+    out, depth, start = [], 0, None
+    for i, ch in enumerate(b):
+        if ch == '(':
+            depth += 1
+            if depth == 1:
+                start = i + 1
+        elif ch == ')':
+            depth -= 1
+            if depth == 0 and start is not None:
+                out.append((start, i))
+                start = None
+    return out
+
+
+def split_commas(text):
+    """Split on the commas that are not inside brackets."""
+    out, depth, cur = [], 0, []
+    for ch in text:
+        if ch in '([{':
+            depth += 1
+        elif ch in ')]}':
+            depth -= 1
+        if ch == ',' and depth == 0:
+            out.append(''.join(cur))
+            cur = []
+        else:
+            cur.append(ch)
+    if ''.join(cur).strip():
+        out.append(''.join(cur))
+    return out
+
+
+def inline_ports(header, hline):
+    """Ports from an ANSI header written on one line.
+
+    The main pass is line-oriented, so `module foo (input a, output b);` gets
+    nothing: no line begins with a direction keyword. Split the port list on its
+    own commas instead. The last top-level group is the ports, since a header
+    with parameters has `#(...)` in front of it.
+    """
+    b = blank(header)
+    groups = top_level_groups(b)
+    if not groups:
+        return []
+    lo, hi = groups[-1]
+    ports = []
+    for frag in split_commas(b[lo:hi]):
+        m = PORT.match(frag.strip())
+        if not m:
+            continue
+        for n in port_names(m.group('names')):
+            ports.append({'name': n, 'dir': m.group('dir'), 'net': m.group('net') or '',
+                          'width': (m.group('width') or '').strip(),
+                          'group': 'Ports', 'comment': '', 'line': hline})
+    return ports
+
+
+
 def parse(path):
     src = open(path, encoding='utf-8', errors='replace').read()
     name, header, hline, hend = split_header(src)
@@ -246,13 +319,14 @@ def parse(path):
 
         q = PORT.match(code)
         if q:
-            ports.append({'name': q.group('name'),
-                          'dir': q.group('dir'),
-                          'net': q.group('net') or '',
-                          'width': (q.group('width') or '').strip(),
-                          'group': group or 'Ports',
-                          'comment': clean(cmt or ' '.join(note)),
-                          'line': lineno})
+            for n in port_names(q.group('names')):
+                ports.append({'name': n,
+                              'dir': q.group('dir'),
+                              'net': q.group('net') or '',
+                              'width': (q.group('width') or '').strip(),
+                              'group': group or 'Ports',
+                              'comment': clean(cmt or ' '.join(note)),
+                              'line': lineno})
             note = []
             continue
         note = []
@@ -265,6 +339,8 @@ def parse(path):
         body = body[:end.start()]
     bline = src[:hend].count('\n') + 1
 
+    if not ports:
+        ports = inline_ports(header, hline)
     if not ports:
         order = header_port_order(header)
         if order:

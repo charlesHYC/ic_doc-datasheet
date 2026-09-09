@@ -32,7 +32,8 @@ from PIL import Image
 
 CSS_PX_MM = 96 / 25.4                      # 1 mm in CSS pixels
 A4_W, A4_H = 210 * CSS_PX_MM, 297 * CSS_PX_MM
-PROBE_H = 6000                             # tall enough for any single page
+PROBE_H = 6000                             # tall enough for any sane page
+PROBE_MAX = 24000                          # ... and a retry for the others
 
 
 def split_pages(html):
@@ -61,12 +62,17 @@ def split_pages(html):
 
 
 def firefox(src, png, w, h):
-    subprocess.run(['firefox', '--headless',
-                    # --screenshot silently writes nothing for a relative path
-                    '--screenshot', os.path.abspath(png),
-                    '--window-size=%d,%d' % (w, h), src],
-                   env=dict(os.environ, MOZ_HEADLESS='1'), timeout=300,
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        subprocess.run(['firefox', '--headless',
+                        # --screenshot silently writes nothing for a relative path
+                        '--screenshot', os.path.abspath(png),
+                        '--window-size=%d,%d' % (w, h), src],
+                       env=dict(os.environ, MOZ_HEADLESS='1'), timeout=300,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except subprocess.TimeoutExpired:
+        sys.exit('firefox timed out rendering %s; is the page enormous?' % src)
+    except FileNotFoundError:
+        sys.exit('firefox is not on PATH, and topdf.py needs it to render')
     if not os.path.exists(png):
         sys.exit('firefox produced no screenshot: ' + png)
 
@@ -78,7 +84,7 @@ def write_tmp(work, doc):
     return 'file://' + path
 
 
-def measure(page_html, prelude, work):
+def measure(page_html, prelude, work, probe=PROBE_H):
     """Natural height of one page in CSS px.
 
     The page keeps its own min-height and the body keeps its grey background,
@@ -90,27 +96,36 @@ def measure(page_html, prelude, work):
     png = os.path.join(work, 'probe.png')
     if os.path.exists(png):
         os.remove(png)
-    firefox(src, png, round(A4_W), PROBE_H)
+    firefox(src, png, round(A4_W), probe)
 
     px = Image.open(png).convert('RGB').load()
     x = 4                                   # inside the page, outside its padding
     h = 0
-    for y in range(PROBE_H):
+    for y in range(probe):
         if px[x, y][0] > 245:
             h = y + 1
         elif h:
             break                           # first grey row after the page ends
+    if h >= probe and probe < PROBE_MAX:
+        # the page ran past the probe window; measuring it again taller
+        # beats reporting the window height as though it were the page
+        return measure(page_html, prelude, work, min(probe * 4, PROBE_MAX))
     return h
 
 
-def shoot(page_html, prelude, scale, out_png, work):
-    """Render one page to PNG at `scale` times its CSS size."""
+def shoot(page_html, prelude, scale, out_png, work, height=None):
+    """Render one page to PNG at `scale` times its CSS size.
+
+    `height` defaults to A4. Pass the measured height to see a page that does not
+    fit: rendering it in an A4 window would crop away the very part you opened
+    the PNG to look at.
+    """
     src = write_tmp(work, prelude +
                     '<style>html,body{margin:0;padding:0;background:#fff}'
                     '.zoom{transform:scale(%g);transform-origin:top left}'
                     '.page{margin:0;box-shadow:none}</style>'
                     '<div class="zoom">%s</div>' % (scale, page_html))
-    firefox(src, out_png, round(A4_W * scale), round(A4_H * scale))
+    firefox(src, out_png, round(A4_W * scale), round((height or A4_H) * scale))
 
 
 def to_a4(png, scale):
@@ -167,9 +182,10 @@ def main():
 
     work = tempfile.mkdtemp(prefix='topdf_')
     try:
-        limit, over = round(A4_H), []
+        limit, over, heights = round(A4_H), [], {}
         for n, page in enumerate(pages, 1):
             h = measure(page, prelude, work)
+            heights[n] = h
             if h > limit + 2:
                 over.append((n, h))
                 print('  page %2d  %4d px  OVER A4 by %d px (%.1f mm)'
@@ -180,7 +196,7 @@ def main():
             print('\n%d of %d pages do not fit A4 (%d px).' % (len(over), len(pages), limit))
             print('min-height on .page is a minimum, so these look fine stacked on screen '
                   'but will not print. Split them in build.py.')
-            if not (a.force or a.check):
+            if not (a.force or a.check or a.png):
                 sys.exit(1)
         elif not a.check:
             print('  all %d pages fit A4' % len(pages))
@@ -188,11 +204,17 @@ def main():
             return
 
         if a.png:
+            # An overflowing page is exactly the one worth looking at, so --png
+            # is not blocked by the overflow and renders the page at its real
+            # height rather than cropping it back to A4.
             stem = re.sub(r'\.html?$', '', a.html)
             for n in page_numbers(a.png, len(pages)):
                 png = '%s_page%02d.png' % (stem, n)
-                shoot(pages[n - 1], prelude, a.scale, png, work)
-                print('  %s' % png)
+                shoot(pages[n - 1], prelude, a.scale, png, work,
+                      height=max(heights[n], A4_H))
+                extra = ('   (%d px over A4, shown in full)' % (heights[n] - limit)
+                         if heights[n] > limit + 2 else '')
+                print('  %s%s' % (png, extra))
             return
 
         print('rendering at %gx (%d dpi)' % (a.scale, round(96 * a.scale)))

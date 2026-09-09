@@ -185,13 +185,20 @@ def bundle(ports):
     to a common prefix, and only collapses when there are enough of them to be
     worth it.
     """
-    CHAN = re.compile(r'^(.*_(?:aw|ar|w|r|b))[a-z]+$')
+    CHAN = re.compile(r'^(.*_(?:aw|ar|w|r|b))([a-z]+)$')
 
     def stem(name):
         m = CHAN.match(name)
         if m:
             return m.group(1), True
         return name.rsplit('_', 1)[0], False
+
+    def really_a_channel(run):
+        """The prefix rule alone is not enough: cpu_wdata and cpu_we end in _w
+        plus letters and are not a channel. Every AXI channel has both a valid
+        and a ready, so ask for those."""
+        sufs = {CHAN.match(q['name']).group(2) for q in run if CHAN.match(q['name'])}
+        return {'valid', 'ready'} <= sufs
 
     out, i = [], 0
     while i < len(ports):
@@ -200,6 +207,8 @@ def bundle(ports):
         run, j = [p], i + 1
         while j < len(ports) and ports[j]['dir'] == p['dir'] and stem(ports[j]['name'])[0] == st:
             run.append(ports[j]); j += 1
+        if is_chan and not really_a_channel(run):
+            is_chan = False
         if len(run) >= (2 if is_chan else 4):
             out.append((st + '*', '%d signals' % len(run), p['dir']))
         else:
@@ -235,16 +244,26 @@ def by_group(ports):
     return out
 
 
+# Drawn on the underside of the symbol rather than as inputs on the left.
+# rst_n is the common spelling and was being drawn as an ordinary input.
+BOTTOM_PINS = {'clk', 'clock', 'aclk', 'rst', 'rstn', 'rst_n', 'reset', 'reset_n',
+               'resetn', 'areset', 'aresetn', 'areset_n'}
+
+
+def is_bottom(name):
+    return name.lower() in BOTTOM_PINS
+
+
 def symbol(mod):
     vals = resolve_params(mod)
-    live = [p for p in mod['ports'] if p['name'] not in ('clk', 'rst')]
+    live = [p for p in mod['ports'] if not is_bottom(p['name'])]
     ins = bundle([p for p in live if p['dir'] == 'input'])
     outs = bundle([p for p in live if p['dir'] == 'output'])
     # a symbol taller than a page helps nobody; step up to interface granularity
     if max(len(ins), len(outs)) > 13:
         ins = by_group([p for p in live if p['dir'] == 'input'])
         outs = by_group([p for p in live if p['dir'] == 'output'])
-    clks = [p['name'] for p in mod['ports'] if p['name'] in ('clk', 'rst')]
+    clks = [p['name'] for p in mod['ports'] if is_bottom(p['name'])]
     pitch, pad, bx, bw = 27, 24, 226, 200
     rows = max(len(ins), len(outs))
     bh = rows * pitch + 2 * pad
