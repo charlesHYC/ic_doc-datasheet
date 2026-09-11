@@ -31,6 +31,7 @@ does not try. What it does automate is everything tedious and error-prone: resol
 
 ```sh
 git clone https://github.com/charlesHYC/ic_doc-datasheet ~/.claude/skills/ic-datasheet
+bash ~/.claude/skills/ic-datasheet/example/run.sh     # builds the example: proves the setup works
 ```
 
 Then in Claude Code:
@@ -43,7 +44,7 @@ Claude reads `SKILL.md` and drives the scripts. You can also run them by hand �
 
 ## Requirements
 
-- Python 3.8+ for `extract.py` / `build.py` / `paginate.py`
+- Python 3.6 or later (tested with 3.6.8, 3.9 and 3.11). Only the standard library, except:
 - [Pillow](https://pypi.org/project/Pillow/) and Firefox for `topdf.py`
 
 If your machine has several Pythons, Pillow may not be installed in the one that runs
@@ -57,7 +58,7 @@ If your machine has several Pythons, Pillow may not be installed in the one that
 python3 scripts/extract.py rtl/a.v rtl/b.v > modules.json
 
 # 2. Assemble the HTML (start from example/build.py and edit PROSE)
-python3 build.py
+PYTHONPATH=scripts python3 build.py
 
 # 3. Look at the pages. Each one is rendered on its own, so there is nothing
 #    to crop; a page that overflows is shown at its real height.
@@ -68,17 +69,24 @@ python3 scripts/topdf.py my_design_datasheet_manual.html --check
 python3 scripts/topdf.py my_design_datasheet_manual.html
 ```
 
+Pages render in parallel, each in its own headless Firefox with a private profile, so a browser
+you already have open does not get in the way. A 29-page datasheet converts in about 17 s at
+192 dpi (`--scale 2`) and 19 s at 288 dpi; `--jobs N` sets how many pages render at once.
+
 ## What's in here
 
 | Path | |
 |---|---|
 | `SKILL.md` | the skill: workflow, layout rules, and the traps worth knowing |
-| `scripts/extract.py` | Verilog-2001 module header parser → JSON |
+| `scripts/extract.py` | module header parser → JSON; Verilog-95 and Verilog-2001 headers |
 | `scripts/paginate.py` | height estimates, so long tables split before they overflow |
-| `scripts/topdf.py` | HTML → A4 PDF, and the page-fits-A4 check |
-| `scripts/wave.py` | timing figure renderer |
+| `scripts/topdf.py` | HTML → A4 PDF, the page-fits-A4 check, and per-page PNGs |
+| `scripts/wave.py` | timing figure renderer, datasheet-style buses |
 | `scripts/blocks.py` | connectivity block diagram layout |
-| `example/build.py` | a real project's assembly script — copy it and edit |
+| `example/build.py` | the example's assembly script — copy it and edit |
+| `example/rtl/` | six stub modules, real interfaces and empty bodies, so the example runs |
+| `example/run.sh` | extract → build → A4 check for the example, output in `example/out/` |
+| `tests/test_scripts.py` | regression checks; run it after touching any script |
 
 `extract.py`, `paginate.py` and `topdf.py` are project-independent. `wave.py` and `blocks.py`
 have generic renderers but the content of each figure is written per project.
@@ -98,10 +106,21 @@ not being selectable.
 
 ## Example
 
-`example/build.py` is the assembly script for a real 29-page datasheet: 6 RTL modules, 4
-waveforms taken from simulation, and a memory-mapped register map. Copying it and replacing
-the `PROSE`, `CSR`, `LIB` and `FULL` constants is the fastest way to start; the CSS, the
-symbol renderer, the table builders and the pagination all carry over unchanged.
+`bash example/run.sh` builds a 24-page datasheet from the stubs in `example/rtl/`: six modules,
+their symbols and pin tables, a register map, a block diagram and four waveforms. Add `--png` to
+render every page, or `--pdf` for a 192 dpi PDF. Copying `example/build.py` and replacing the
+`PROSE`, `CSR`, `LIB` and `FULL` constants is the fastest way to start on your own design; the
+CSS, the symbol renderer, the table builders and the pagination all carry over unchanged.
+
+## Tests
+
+```sh
+python3 tests/test_scripts.py
+```
+
+Each check is a way a script once went wrong without saying so: a Verilog-95 header coming back
+with no ports, a task call counted as an instance, a heading in the parameter list labelling the
+first ports, `paginate.chunk` ignoring `first`, a waveform quietly shrunk to fit.
 
 ## License
 

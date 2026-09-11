@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Assemble the datasheet from modules.json plus the prose kept here.
 
-WORKED EXAMPLE. This is the real assembly script for a 29-page datasheet of
-a fictional example design. Copy it into your own project directory
-alongside the skill's scripts/ and edit the project-specific constants:
+WORKED EXAMPLE. This assembles the datasheet of a fictional design whose
+module stubs live in example/rtl/, so the whole flow runs as it stands:
+
+    bash example/run.sh
+
+For your own project, copy this file next to your modules.json and edit the
+project-specific constants:
 
     DESIGN, PROSE, LIB, FULL, CSR, TIMING, and the cover page text
 
@@ -14,8 +18,9 @@ Facts (parameters, ports, groups, instantiation) come from extract.py and are
 never edited by hand. Prose is authored, and lives in PROSE below so a re-run
 cannot overwrite it.
 
-Run it from a directory holding modules.json and the skill's scripts:
-    python3 build.py
+Run it from a directory holding modules.json, with the skill's scripts/ on
+the import path:
+    PYTHONPATH=<skill>/scripts python3 build.py
 """
 import json
 import re
@@ -583,7 +588,7 @@ page("""
   <div class="band"><h2>Shell<small>soc_app_top.v</small></h2><div>
     <p>%s</p><p>%s</p>
     <p class="note">%d parameters, %d ports, all defined
-    by the framework framework. The port table is omitted here for that reason; the register map
+    by the framework. The port table is omitted here for that reason; the register map
     below is the part this design defines.</p>
   </div></div>
 

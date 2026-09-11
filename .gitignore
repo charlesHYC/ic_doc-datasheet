@@ -6,3 +6,4 @@ modules.json
 *.png
 !example/*.png
 blocks.svg
+example/out/

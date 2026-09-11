@@ -51,7 +51,9 @@ compiler 那種），但**不做 process corner 的細部參數表**。
    python3 scripts/extract.py <file1>.v <file2>.v ... > modules.json
    ```
    輸出每個 module 的 name / params / ports / localparams / instantiates。
-   banner 註解（`// ---- AXI write ----`）會被當成 port 分組標題。
+   port 分組標題有兩種寫法都認得：單行的 `// ---- AXI write ----`，以及上下各一行純破折號、
+   中間一行標題的三行式；標題前後的破折號會被清掉。寫在 `#(...)` parameter 列表裡的標題
+   只屬於 parameter，不會延續去標記第一批 port。
 
    ANSI-2001（方向寫在 port list 裡）與 **Verilog-95**（header 只有名字、方向與
    位寬宣告在 module 內）兩種 header 都吃得下。memory compiler 與 vendor macro
@@ -91,7 +93,10 @@ compiler 那種），但**不做 process corner 的細部參數表**。
    python3 scripts/topdf.py <design>_datasheet_manual.html             # 288 dpi
    python3 scripts/topdf.py <design>_datasheet_manual.html --scale 2   # 192 dpi，檔案較小
    ```
-   30 頁約需十來分鐘（每頁跑一次 headless 瀏覽器）。
+   每頁由一個 headless Firefox 渲染，量高度與出圖在同一次完成，預設 4 頁同時跑
+   （`--jobs N` 可調）。實測 29 頁：`--check` 約 14 秒、`--scale 2` 約 17 秒、`--scale 3`
+   約 19 秒。每個 Firefox 都用暫存的獨立 profile 並加 `--no-remote`，所以你自己開著的
+   Firefox 不會鎖住 profile 或把請求接走。
 
 ---
 
@@ -216,8 +221,9 @@ python3 scripts/topdf.py <design>_datasheet_manual.html --png 3 --scale 2   # �
 單獨看一張 SVG（還沒進 datasheet 之前）才需要自己截圖，這時：
 
 ```sh
-WD=$PWD    # --screenshot 給相對路徑時 firefox 不報錯，也不產生檔案
-MOZ_HEADLESS=1 timeout 200 firefox --headless \
+WD=$PWD          # --screenshot 給相對路徑時 firefox 不報錯，也不產生檔案
+P=$(mktemp -d)   # 獨立 profile：已經開著的 Firefox 會鎖住或接走預設 profile
+MOZ_HEADLESS=1 timeout 200 firefox --headless --no-remote --profile "$P" \
   --screenshot "$WD/one.png" --window-size=800,400 "file://$WD/one.html"
 ```
 
@@ -279,8 +285,8 @@ chromium / wkhtmltopdf / weasyprint，就只能自己來：`scripts/topdf.py` �
 
 ## 環境
 
-- `extract.py` / `build.py` / `paginate.py` 需要 **Python 3.8+**
-- `topdf.py` 需要 **Pillow** 與 **Firefox**
+- 全部腳本支援 **Python 3.6+**（實測 3.6.8、3.9、3.11），只用標準函式庫
+- `topdf.py` 另外需要 **Pillow** 與 **Firefox**
 - ⚠️ 若機器上有多個 Python，Pillow 不一定裝在你跑 `build.py` 的那一個。
   兩支腳本用不同直譯器是常見情況，明確寫出路徑，不要假設 `python3` 到處都一樣。
 
@@ -288,9 +294,11 @@ chromium / wkhtmltopdf / weasyprint，就只能自己來：`scripts/topdf.py` �
 
 | 檔案 | 通用程度 |
 |---|---|
-| `scripts/extract.py` | ✅ 完全通用，Verilog-95 與 Verilog-2001 header 都支援 |
+| `scripts/extract.py` | ✅ 完全通用，Verilog-95 與 Verilog-2001 header 都支援（含整行寫完的 header 與 parameter 列表） |
 | `scripts/paginate.py` | ✅ 完全通用。高度估算，讓 `build.py` 在超出前就把表格拆頁 |
-| `scripts/topdf.py` | ✅ 完全通用。轉 PDF、`--check` 驗每頁放不放得進 A4、`--png` 逐頁出圖給人看 |
+| `scripts/topdf.py` | ✅ 完全通用。轉 PDF、`--check` 驗每頁放不放得進 A4、`--png` 逐頁出圖給人看；多頁平行渲染（`--jobs`） |
+| `tests/test_scripts.py` | 回歸測試。extract / paginate / wave 以前出過的每一個錯都有一項檢查；**改任何腳本後先跑它** |
+| `example/run.sh` | 端對端範例：用 `example/rtl/` 的 stub 從抽取跑到 A4 檢查；裝好 skill 後先跑一次確認環境 |
 | `scripts/wave.py` | renderer 通用；每張波形的 spec（哪些 cycle、哪些訊號）要照專案手寫 |
 | `scripts/blocks.py` | 版面邏輯通用；資料流順序要照專案改 |
 
@@ -300,6 +308,14 @@ chromium / wkhtmltopdf / weasyprint，就只能自己來：`scripts/topdf.py` �
 `resolve_params()`（把 `[NUM_CH*ID_WIDTH-1:0]` 這種算成 `[95:0]`，含 `$clog2`）、
 以及整套分頁邏輯。
 
-⚠️ `example/build.py` 與 `scripts/blocks.py`、`scripts/wave.py` 裡的**模組名稱與資料流
-是匿名化過的範例**，不對應任何真實 `modules.json`，所以不能直接跑起來。它們是**範本**：
-把名字、`PROSE`、`CSR` 換成你自己專案的，版面與邏輯照抄。
+`example/rtl/` 放了 6 個只有介面、內部是空的 stub 模組，名稱與 `build.py`、`blocks.py`、
+`wave.py` 裡的一致，所以整條流程可以直接跑：
+
+```sh
+bash example/run.sh          # 產生 HTML，並檢查每頁都放得進 A4（輸出在 example/out/）
+bash example/run.sh --png    # 另外把每頁畫成 PNG
+bash example/run.sh --pdf    # 另外轉成 192 dpi 的 PDF
+```
+
+它們仍然是**範本**：用在自己的專案時，把模組名稱、`PROSE`、`CSR`、波形與方塊圖的內容
+換成你的，版面與邏輯照抄。

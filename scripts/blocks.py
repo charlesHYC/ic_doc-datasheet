@@ -108,7 +108,7 @@ def render():
     L.txt(CX + CW_ / 2, 128, 'control bus', 12)
     L.rect(CX, 166, CW_, 48, '#eeece8', '1.3')
     L.txt(CX + CW_ / 2, 186, 'write', 11.5, weight='bold')
-    L.txt(CX + CW_ / 2, 201, '_path_v2', 11.5, weight='bold')
+    L.txt(CX + CW_ / 2, 201, '_path', 11.5, weight='bold')
     cx = CX + CW_ / 2
     L.o.append('<line x1="%g" y1="140" x2="%g" y2="166" stroke="#000" stroke-width="1.2" '
                'marker-end="url(#a)"/>' % (cx, cx))

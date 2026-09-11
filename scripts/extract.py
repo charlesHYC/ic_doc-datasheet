@@ -19,6 +19,9 @@ import sys
 IDENT = r'[A-Za-z_][A-Za-z_0-9$]*'
 
 BANNER = re.compile(r'^\s*//\s*[-=]{3,}\s*$')
+# A heading and its rules on one line:   // ---- AXI write ----
+# Without this the heading became the description of whichever port followed it.
+BANNER_TITLE = re.compile(r'^\s*//\s*[-=]{3,}\s*(?P<title>[^-=\s].*?)\s*[-=]{3,}\s*$')
 # One declaration may carry several names and each may have an initialiser:
 #   input wire [7:0] a, b,        output reg ready = 1'b0,
 PORT = re.compile(r"""^\s*
@@ -277,6 +280,36 @@ def inline_ports(header, hline):
 
 
 
+def inline_params(header, hline):
+    """Parameters from a `#(...)` list written on one line.
+
+    The main pass only sees a parameter when `parameter` opens a line, so
+    `module foo #(parameter W = 8) (...)` came back with none. The parameter
+    list is the first top-level group when `#` precedes it. A name without its
+    own keyword (`parameter A = 1, B = 2`) inherits the previous one.
+    """
+    b = blank(header)
+    groups = top_level_groups(b)
+    if len(groups) < 2 or b[:groups[0][0] - 1].rstrip()[-1:] != '#':
+        return []
+    lo, hi = groups[0]
+    out, seen = [], False
+    for frag in split_commas(header[lo:hi]):
+        frag = frag.strip()
+        m = PARAM.match(frag)
+        if m:
+            seen = True
+            out.append({'name': m.group('name'), 'value': m.group('value').strip(),
+                        'type': (m.group('type') or '').strip(), 'comment': '',
+                        'line': hline})
+            continue
+        m = re.match(r'(%s)\s*=\s*(.+)$' % IDENT, frag, re.S)
+        if m and seen:
+            out.append({'name': m.group(1), 'value': m.group(2).strip(), 'type': '',
+                        'comment': '', 'line': hline})
+    return out
+
+
 def parse(path):
     src = open(path, encoding='utf-8', errors='replace').read()
     name, header, hline, hend = split_header(src)
@@ -286,6 +319,12 @@ def parse(path):
     params, ports = [], []
     group, note, banner_buf, in_banner = None, [], [], False
     hb = blank(header).split('\n')
+    # A heading inside the #(...) parameter list names a group of parameters;
+    # it must not carry on into the port list and label the first ports. The
+    # port list is the last top-level group of the header.
+    groups = top_level_groups(blank(header))
+    port_line = blank(header)[:groups[-1][0]].count('\n') if groups else 0
+    group_line = -1
 
     for off, raw in enumerate(header.split('\n')):
         code, cmt = strip_trailing(raw)
@@ -294,13 +333,22 @@ def parse(path):
         if BANNER.match(raw):
             if in_banner:
                 in_banner = False
-                if banner_buf:
-                    # first line is the heading; anything after it is prose
-                    group = banner_buf[0].strip()
-                    if len(banner_buf) > 1:
-                        note = list(banner_buf[1:])
+                # The heading is the first line with words in it, stripped of the
+                # dashes it is padded with ("//---- GT ports ----" inside a
+                # ruled block); anything after it is prose.
+                heads = [k for k, s in enumerate(banner_buf)
+                         if re.search(r'[A-Za-z0-9]', clean(s))]
+                if heads:
+                    k = heads[0]
+                    group, group_line = clean(banner_buf[k]), off
+                    if len(banner_buf) > k + 1:
+                        note = list(banner_buf[k + 1:])
             else:
                 in_banner, banner_buf = True, []
+            continue
+        t = BANNER_TITLE.match(raw)
+        if t and not in_banner:
+            group, group_line, note = t.group('title'), off, []
             continue
         if not code.strip():
             if cmt:
@@ -319,6 +367,8 @@ def parse(path):
 
         q = PORT.match(code)
         if q:
+            if group is not None and group_line < port_line:
+                group = None                    # that heading belonged to the parameters
             for n in port_names(q.group('names')):
                 ports.append({'name': n,
                               'dir': q.group('dir'),
@@ -339,6 +389,8 @@ def parse(path):
         body = body[:end.start()]
     bline = src[:hend].count('\n') + 1
 
+    if not params:
+        params = inline_params(header, hline)
     if not ports:
         ports = inline_ports(header, hline)
     if not ports:
