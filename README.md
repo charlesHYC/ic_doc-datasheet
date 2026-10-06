@@ -6,6 +6,12 @@ waveforms and a register map, in the style of a foundry IP datasheet.
 
 Output is two files: an **HTML** you can keep editing, and an **A4 PDF** you can print or mail.
 
+For a standalone RTL block diagram, the skill also supports **editable draw.io schematics**
+in a monochrome Verdi-like style: operator-level pipeline detail, explicit pins, registers,
+MUXes and control paths. This mode produces `.drawio` plus reviewed PDF/PNG exports without
+requiring an A4 datasheet. See [the schematic workflow](references/rtl-schematic.md).
+The style is inspired by Verdi; these are not Verdi-generated or synthesized netlists.
+
 <p align="center">
   <img src="example/sample-page.png" width="45%" alt="Cover page: overview and key figures">
   <img src="example/sample-blockdiagram.png" width="45%" alt="Connectivity block diagram">
@@ -83,6 +89,9 @@ you already have open does not get in the way. A 29-page datasheet converts in a
 | `scripts/topdf.py` | HTML → A4 PDF, the page-fits-A4 check, and per-page PNGs |
 | `scripts/wave.py` | timing figure renderer, datasheet-style buses |
 | `scripts/blocks.py` | connectivity block diagram layout |
+| `scripts/drawio_schematic.py` | editable schematic symbols, pin-connected edges and geometry checks |
+| `references/rtl-schematic.md` | standalone diagram workflow, RTL evidence and visual review |
+| `tests/test_drawio_schematic.py` | schematic geometry and XML regression checks |
 | `example/build.py` | the example's assembly script — copy it and edit |
 | `example/rtl/` | six stub modules, real interfaces and empty bodies, so the example runs |
 | `example/run.sh` | extract → build → A4 check for the example, output in `example/out/` |
