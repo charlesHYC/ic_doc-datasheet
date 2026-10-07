@@ -7,10 +7,16 @@ waveforms and a register map, in the style of a foundry IP datasheet.
 Output is two files: an **HTML** you can keep editing, and an **A4 PDF** you can print or mail.
 
 For a standalone RTL block diagram, the skill also supports **editable draw.io schematics**
-in a monochrome Verdi-like style: operator-level pipeline detail, explicit pins, registers,
+in a Verdi-like style: operator-level pipeline detail, explicit pins, registers,
 MUXes and control paths. This mode produces `.drawio` plus reviewed PDF/PNG exports without
 requiring an A4 datasheet. See [the schematic workflow](references/rtl-schematic.md).
 The style is inspired by Verdi; these are not Verdi-generated or synthesized netlists.
+
+Choose a **compact stage overview** or **operator detail** before drawing. Overviews keep
+the data path continuous from left to right, group logic with its receiving registers in
+dashed stage frames, and show backward ready/free paths separately. The workflow follows
+the user's accepted reference, including restrained color when appropriate, while keeping
+confidential reference circuits out of this repository.
 
 <p align="center">
   <img src="example/sample-page.png" width="45%" alt="Cover page: overview and key figures">

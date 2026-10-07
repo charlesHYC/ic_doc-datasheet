@@ -4,6 +4,75 @@ Use this mode for a standalone block diagram, a Verdi-like schematic, or an oper
 pipeline expansion. Draw a technical schematic with real connections, not an illustration.
 Verdi-like describes the visual grammar; do not claim the output came from Verdi or synthesis.
 
+## Read the accepted reference before choosing detail
+
+When asked to learn a drawing style, inspect the actual latest drawing and its editable
+source. Compare the generated version with any later user-edited version; filenames and
+modification times identify candidates, but do not by themselves prove user approval.
+Use the user's stated preference to choose the reference. Extract visual rules, not the
+reference circuit. Do not regenerate or overwrite a hand-edited drawing while studying it.
+
+Choose the view before placing symbols:
+
+| Requested view | Drawing approach |
+|---|---|
+| Overall architecture or stage overview | Compact horizontal chain, meaningful logic groups, visible register boundaries and interfaces |
+| Operator-level detail | Expand the requested logic into actual MUXes, adders, comparisons and registers while retaining the connected main path |
+| Overview plus detail | Keep a readable overview; expand selected groups on linked detail pages using consistent interface names |
+
+An overview is not a testbench wiring map: avoid isolated named-input islands, stimulus
+boxes, or long lists of signals detached from their sources. An operator diagram is not
+automatically a better overview. Keep the chosen abstraction level consistent and do not
+expand every arithmetic expression merely because its RTL is available.
+
+## Compact stage overview layout
+
+Place the input structures on the left, the ordered processing stages across one horizontal
+band, and the outputs on the right. Align repeated units in rows with the same port heights,
+symbol sizes and spacing. A many-input MUX may span those rows, with numbered input pins;
+its select enters separately from below. Keep repeated units separate unless the requested
+abstraction explicitly permits an annotated repeated group.
+
+Within a stage, draw its combinational group followed by the register that captures the
+result. Enclose them in a thin dashed stage frame, with a short bold title at its upper-left
+corner. A stage frame describes a clock boundary, not necessarily a Verilog module; infer
+membership from actual register assignments. Do not blindly copy frame boundaries from a
+reference. The logic between registers must meet that clock period, but the drawing alone
+does not establish that timing has passed.
+
+Keep the record/data path across the middle of the stage chain. Route accompanying metadata
+on a nearby parallel track; route ready/free feedback backward along a separate lower track.
+Put supporting counters and time calculations close below the stage that uses them, with
+visible connections into the main path. Avoid tall register bars and large empty regions
+that make a short pipeline occupy a wall-sized canvas.
+
+Use the following visual vocabulary consistently within this overview style:
+
+| Element | Appearance and meaning |
+|---|---|
+| Combinational group | Modestly rounded rectangle with a short function name; no clock marker |
+| Register or sequential block | Square rectangle with a clock-edge triangle; do not add a triangle to combinational logic |
+| FIFO | Queue-like rectangle with parallel inset lines or a small row of storage slots; label width and depth with units |
+| MUX | Trapezoid with numbered inputs and a separate select pin; not a generic rectangle |
+| Expanded adder | Circle with `+` and attached operand/result pins; use an equivalent expression grouping only when identified as such |
+| Stage boundary | Thin dashed, unfilled enclosure behind its contents; title clear of all wires |
+| Forward data path | Solid orthogonal line, arrow toward the receiver; compact width labels or bus slash where useful |
+| Backward ready/free path | Dashed orthogonal line, arrow toward the upstream recipient; distinct from the stage enclosure |
+| FSM-containing module | Append `{F}` only after confirming an actual state machine in the RTL; valid bits and counters alone do not justify it |
+
+An approved reference may use pale fills to distinguish component families. If so, use a
+small consistent palette, preserve black text and legible strokes, and keep shape semantics
+readable in grayscale. Use monochrome when requested. Color never substitutes for identifying
+whether a block is combinational, registered, a FIFO or an FSM. Do not impose one palette
+or one corner style on all future diagrams regardless of the reference.
+
+Size blocks around their names and ports. Use one short title plus a few essential fields;
+move full descriptions and equations to a detail page when they obscure the overview.
+Wrap at meaningful boundaries, widen the block before reducing the font, and keep labels
+outside narrow routing channels. Port labels must not collide with the block's central
+text. Keep the main stages readable at the intended viewing size, not only at extreme zoom.
+A compact legend can explain the clock marker, stage frame and dashed feedback once.
+
 ## Establish the circuit and scope
 
 Read the project's instructions and active synthesis file list. Trace actual instantiations
@@ -21,7 +90,7 @@ Before drawing, record the following in a local working table:
 | Transfer | valid/ready acceptance, hold, release, simultaneous set/clear priority |
 | Output | Exact data and sideband sources, time gating and backpressure |
 
-For a detailed pipeline, expand arithmetic, carry folds, masks, comparisons, counters,
+For an operator-level pipeline request, expand arithmetic, carry folds, masks, comparisons, counters,
 field replacement and selection inside modules. Show the whole pipeline with register
 boundaries, adding detail pages for crowded logic. A page containing only one opaque module
 does not satisfy an operator-level request. Preserve an already approved surrounding diagram.
@@ -32,7 +101,9 @@ memory primitive, timing result, or throughput guarantee from a behavioral expre
 
 ## Symbol and wire grammar
 
-- White background, black thin strokes, square corners and restrained serif typography.
+- White background, thin legible strokes and restrained serif typography. Use the selected
+  view's symbol vocabulary; the overview may distinguish rounded combinational blocks from
+  square registered blocks and use an approved reference's pale fills.
   Keep figure text to English identifiers, widths, operators and short technical labels;
   place explanatory prose in accompanying documentation.
 - Use a trapezoid for a MUX, with visible 0/1 inputs and a separate select pin. Use a register
@@ -110,9 +181,18 @@ Iterate until both checks pass:
    penetration. `Page.check()` catches diagonal segments, wire/block intersections and
    partial label/block overlap. It does not prove RTL correctness, text legibility,
    net separation, or absence of label/label collisions.
-2. **Visual check:** inspect each exported image and zoom into dense regions. Check wire
+2. **Visual check:** inspect the whole sheet at its intended viewing size, then zoom into
+   dense regions. Check wire
    alignment, MUX select attachment, crossings, text wrapping, clipping, and register port
    placement. Fix the source and regenerate; do not paint over errors in the preview.
+
+For a compact overview, additionally trace one complete input-to-output route without
+jumping between repeated signal names. Trace ready/free in the opposite direction and
+verify where buffering stops or continues that dependency. Check that each stage enclosure
+matches the intended capture boundary. Inspect label/wire and label/label collisions as well
+as block collisions; the geometry helper does not catch all of these. A readable reference's
+composition is worth reusing, but its circuit-specific claims still need independent RTL
+evidence in each new project.
 
 Re-read RTL for every selection polarity, carry width, endian conversion and valid-state
 priority after layout changes. Deliver editable source plus reviewed exports and a short

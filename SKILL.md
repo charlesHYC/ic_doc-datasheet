@@ -1,6 +1,6 @@
 ---
 name: ic-datasheet
-description: Create printable A4 datasheets for Verilog/SystemVerilog projects, or editable draw.io RTL block diagrams in a monochrome Verdi-like schematic style. Use for IP documentation, connectivity diagrams, and detailed pipeline schematics with operators, registers, and control signals.
+description: Create printable A4 datasheets for Verilog/SystemVerilog projects, or editable draw.io RTL block diagrams in a Verdi-like schematic style. Use for IP documentation, compact stage overviews, connectivity diagrams, and detailed pipeline schematics with operators, registers, and control signals.
 metadata:
   short-description: Generate RTL datasheets and editable draw.io schematics
 ---
@@ -18,7 +18,9 @@ compiler 那種），但**不做 process corner 的細部參數表**。
 - **獨立 RTL block diagram／Verdi 風格／pipeline 展開圖**：先讀
   [references/rtl-schematic.md](references/rtl-schematic.md)，使用 draw.io，交付可編輯
   `.drawio` 及經檢視的 PDF／PNG。這個模式不需要建立整本 datasheet，也不強制 A4；
-  要依實際邏輯展開 MUX、register、運算器與控制路徑，不能只把 module 名稱放進方框。
+  先依要求選擇**緊湊 stage 總覽**或 **operator 詳圖**：總覽保持由左至右的主線，
+  用 stage 框區分 combinational logic 與接收結果的 register；詳圖再展開 MUX、adder
+  與控制路徑。使用者提供或認可的最新參考圖優先，不能把所有圖都畫成巨大加法樹。
 
 繪圖與文件需求不授權修改 RTL。發布 skill 時只收錄通用方法與自行建立的抽象範例；
 使用者專案的圖檔、RTL、訊號對照與衍生產物，須另有明確發布授權才能收錄。
