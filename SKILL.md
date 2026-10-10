@@ -21,6 +21,10 @@ compiler 那種），但**不做 process corner 的細部參數表**。
   先依要求選擇**緊湊 stage 總覽**或 **operator 詳圖**：總覽保持由左至右的主線，
   用 stage 框區分 combinational logic 與接收結果的 register；詳圖再展開 MUX、adder
   與控制路徑。使用者提供或認可的最新參考圖優先，不能把所有圖都畫成巨大加法樹。
+- **在使用者已手改的圖上加東西**（例如在讀出圖旁加寫入路徑）：一律產生**新檔**，
+  不寫回原圖；用 `scripts/drawio_extend.py shift` 騰出空間，重產前先用 `diff` 確認
+  使用者實際改了什麼（draw.io 重新存檔會改寫整個檔案，md5 不同不代表有改）。
+  細節見 reference 的「Extending an accepted drawing」與「Composing a system view」。
 
 繪圖與文件需求不授權修改 RTL。發布 skill 時只收錄通用方法與自行建立的抽象範例；
 使用者專案的圖檔、RTL、訊號對照與衍生產物，須另有明確發布授權才能收錄。
@@ -310,6 +314,8 @@ chromium / wkhtmltopdf / weasyprint，就只能自己來：`scripts/topdf.py` �
 | `scripts/extract.py` | ✅ 完全通用，Verilog-95 與 Verilog-2001 header 都支援（含整行寫完的 header 與 parameter 列表） |
 | `scripts/paginate.py` | ✅ 完全通用。高度估算，讓 `build.py` 在超出前就把表格拆頁 |
 | `scripts/topdf.py` | ✅ 完全通用。轉 PDF、`--check` 驗每頁放不放得進 A4、`--png` 逐頁出圖給人看；多頁平行渲染（`--jobs`） |
+| `scripts/drawio_extend.py` | ✅ 完全通用。`shift` 整張已認可的圖騰出空間（不改原檔）；`diff` 分辨使用者真正的修改與 draw.io 重新存檔 |
+| `tests/test_drawio_extend.py` | `shift`／`diff` 的回歸測試（自編的兩方塊電路） |
 | `tests/test_scripts.py` | 回歸測試。extract / paginate / wave 以前出過的每一個錯都有一項檢查；**改任何腳本後先跑它** |
 | `example/run.sh` | 端對端範例：用 `example/rtl/` 的 stub 從抽取跑到 A4 檢查；裝好 skill 後先跑一次確認環境 |
 | `scripts/wave.py` | renderer 通用；每張波形的 spec（哪些 cycle、哪些訊號）要照專案手寫 |

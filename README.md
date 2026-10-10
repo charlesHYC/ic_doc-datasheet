@@ -96,8 +96,10 @@ you already have open does not get in the way. A 29-page datasheet converts in a
 | `scripts/wave.py` | timing figure renderer, datasheet-style buses |
 | `scripts/blocks.py` | connectivity block diagram layout |
 | `scripts/drawio_schematic.py` | editable schematic symbols, pin-connected edges and geometry checks |
+| `scripts/drawio_extend.py` | shift an accepted drawing to make room (new file only); diff two saves semantically |
 | `references/rtl-schematic.md` | standalone diagram workflow, RTL evidence and visual review |
 | `tests/test_drawio_schematic.py` | schematic geometry and XML regression checks |
+| `tests/test_drawio_extend.py` | shift / diff regression checks |
 | `example/build.py` | the example's assembly script — copy it and edit |
 | `example/rtl/` | six stub modules, real interfaces and empty bodies, so the example runs |
 | `example/run.sh` | extract → build → A4 check for the example, output in `example/out/` |
@@ -131,6 +133,8 @@ CSS, the symbol renderer, the table builders and the pagination all carry over u
 
 ```sh
 python3 tests/test_scripts.py
+python3 tests/test_drawio_schematic.py
+python3 tests/test_drawio_extend.py
 ```
 
 Each check is a way a script once went wrong without saying so: a Verilog-95 header coming back

@@ -160,6 +160,70 @@ Write XML with ElementTree so newlines in label attributes survive a save/load r
 Retain custom stencils and native text/shapes; a bitmap embedded in `.drawio` is not editable
 schematic content. Avoid external image references or online editors for confidential RTL.
 
+## Extending an accepted drawing
+
+Once the user has hand-edited a diagram, it is theirs. When asked to add a subsystem
+(for example a write path beside an approved read path), produce a new file built on a
+copy; never write to the accepted file, and confirm afterwards that its checksum did not
+change. `scripts/drawio_extend.py` supports this:
+
+```sh
+python3 drawio_extend.py shift accepted.drawio room.drawio --dx 1600   # make room on the left
+python3 drawio_extend.py diff  before.drawio   after.drawio            # what did the user change?
+```
+
+`shift` moves only root-layer cells. Child cells (pins, clock markers, inner labels) are
+parent-relative and must stay put; edge source/target points and waypoints move; label
+offsets do not. Then append the new section's cells to the copy.
+
+**Re-saves are not edits.** draw.io rewrites the whole file on save: newline entities
+(`&#10;` and `&#xa;`), attribute order and compression all change. A different checksum
+therefore says nothing. Before regenerating a derived drawing, run `diff` against the
+version the generator was written for, and carry over the user's real moves (a port moved
+left, a block resized) instead of assuming the old coordinates.
+
+Keep the user's own text untouched. Adding a line to their block shifts the vertically
+centred text and can push it into decorations they placed inside the block, such as a small
+arrow between two file names. Put an added annotation in a separate text cell above or
+beside the block.
+
+**Layering.** draw.io paints cells in document order. A filled frame or block created after
+an edge or label hides it, with no warning in the XML. Emit enclosures first and new
+content last; append new cells at the end of the root so they are not covered by existing
+filled blocks. After export, look for arrows that stop at a frame border and labels missing
+from inside filled blocks.
+
+## Composing a system view
+
+**One memory, two directions.** When a memory has a write path and a read path, draw the
+writer entering one side and the reader leaving the other, each through its own interface
+block, with one wire per channel lined up with the memory's channel rows on both sides.
+If both sides are the same physical port (for example one AXI port per channel carrying
+AW/W/B and AR/R), label the two blocks with their channel sets and add a single sentence
+saying so, so nobody reads them as two sets of hardware.
+
+**Stage names follow registers.** Combinational logic after a stage's register, with no
+register of its own, belongs to that stage and shares its frame. If a block that used to
+define a stage (an output FIFO, say) is left out of the view, remove its stage name and
+rename signals labelled after it rather than keeping an empty stage name. When a comparison
+happens in one stage, write the condition in that stage's block and route the inputs it
+compares (counter, mode bit) into that block, not into a downstream block.
+
+**Functional view by default.** Blocks that exist only to close timing (register slices,
+isolation FIFOs, clock-domain crossings that do not change the data) usually do not
+belong in a functional explanation. Follow the user's choice; do not re-introduce such
+blocks into the drawing or the narrative unless asked about them.
+
+**Variants from one generator.** Overview, detailed, and with/without a planned design
+are often all wanted. Build them from one generator with switches rather than editing
+exports by hand. When a variant drops a section, also remove every mention of it elsewhere
+(host-side notes, legends, captions, frame titles).
+
+**Notation.** Use the audience's notation in labels: arithmetic such as `(addr ÷ N) mod M`
+where they prefer it over bit slices, and `×`, `÷`, `→` symbols. Replace symbols only in
+contexts you can match exactly: a blanket `" / "` → `÷` also rewrites alternatives such
+as `port a / port b`.
+
 ## Export and review
 
 Export using the installed draw.io desktop CLI. Typical headless Linux commands:
@@ -169,7 +233,10 @@ xvfb-run -a drawio --export --format png --page-index 1 --scale 1.5 --border 30 
 xvfb-run -a drawio --export --format pdf --all-pages --crop --output example.pdf example.drawio
 ```
 
-Use the local executable path when it is not on PATH. Respect environment approval rules;
+Use the local executable path when it is not on PATH. An AppImage that cannot mount
+(no FUSE) runs after `--appimage-extract`, from `squashfs-root/drawio`; Chromium may also
+need `--no-sandbox`. Crop dense regions of a large export with Pillow and inspect them at
+full resolution; a whole wall-sized sheet scaled to a screen hides collisions. Respect environment approval rules;
 check the installed CLI's options if they differ. Verify the resulting file exists and can
 be read even if the process reports an Xvfb cleanup error. Do not confuse that error with
 proof that export succeeded. Export every page, not only the first page.
