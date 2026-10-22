@@ -32,6 +32,7 @@ class Page:
         self.rects = {}
         self.pins = {}
         self.edges = []
+        self.vmargin = {}
     def new(self, prefix):
         self.n += 1
         return f'{self.id}_{prefix}_{self.n}'
@@ -51,11 +52,13 @@ class Page:
         # A clock-edge triangle is part of the register symbol, not a data net.
         self.vertex('',0,h-28,10,16,'shape=triangle;direction=east;strokeWidth=1;fillColor=none;',False,parent=node)
         self.vertex('clk',12,h-28,35,16,'text;strokeColor=none;fillColor=none;fontSize=12;align=left;spacing=0;',False,parent=node)
+        self.vmargin[node]=18
         return node
     def fifo(self,name,x,y,w,h):
         node=self.block(name,x,y,w,h)
         self.vertex('',7,7,w-14,4,'shape=line;strokeWidth=1;',False,parent=node)
         self.vertex('',7,h-11,w-14,4,'shape=line;strokeWidth=1;',False,parent=node)
+        self.vmargin[node]=20
         return node
     def mux(self,name,x,y,w,h):
         return self.vertex(name,x,y,w,h,'shape='+MUX+';align=center;verticalAlign=middle;fontSize=16;')
@@ -123,6 +126,27 @@ class Page:
                     if node in own:continue
                     if x1==x2 and x+1<x1<x+w-1 and max(min(y1,y2),y+1)<min(max(y1,y2),y+h-1):issues.append([eid,'wire crosses block',node])
                     if y1==y2 and y+1<y1<y+h-1 and max(min(x1,x2),x+1)<min(max(x1,x2),x+w-1):issues.append([eid,'wire crosses block',node])
+        # Probable text overflow: wrapped line count x line height vs usable box height.
+        # Approximate; a rendered PNG read at full size is still required.
+        for cell in self.root:
+            ident=cell.get('id')
+            if ident not in self.rects:continue
+            val=cell.get('value') or ''
+            style=cell.get('style','')
+            if not val or 'text;' in style:continue
+            fs=18
+            if 'fontSize=' in style:
+                try:fs=int(style.rsplit('fontSize=',1)[1].split(';',1)[0])
+                except ValueError:pass
+            x,y,w,h=self.rects[ident]
+            avail_w=max(1.0,w-16)
+            lines=0
+            for seg in val.split('\n'):
+                need=len(seg)*fs*0.5
+                lines+=max(1,int((need+avail_w-1)//avail_w))
+            text_h=lines*fs*1.15
+            if text_h>h-self.vmargin.get(ident,4):
+                issues.append([val.split('\n')[0][:24],'text may overflow box',ident])
         return issues
 
 

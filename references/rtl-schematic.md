@@ -109,6 +109,13 @@ memory primitive, timing result, or throughput guarantee from a behavioral expre
 - Use a trapezoid for a MUX, with visible 0/1 inputs and a separate select pin. Use a register
   rectangle with a clock-edge marker and label its enable/reset where relevant. Distinguish
   FIFOs/memories from arithmetic and ordinary module rectangles.
+- Size a many-input MUX or combiner tall enough that each numbered input pin sits at the
+  height of its source block, so every fan-in wire stays a straight horizontal segment; a
+  short MUX with its inputs crammed together forces doglegs and reads as wrong.
+- Fit every block to its wrapped text. A FIFO's two symbol lines sit at the top and bottom
+  of its box, so give it enough height that the label clears both lines, which must never
+  strike through text. When a label wraps past the border, shorten it or enlarge the box or
+  lower its font size; never let text spill out or rest on the frame.
 - Show arithmetic with the actual operator and necessary result width. Comparators and
   Boolean logic need their predicate or operator, not generic boxes named “processing.”
 - Connect edges to explicit pin vertices with source/target IDs. Use off-page terminals
@@ -251,7 +258,12 @@ Iterate until both checks pass:
 2. **Visual check:** inspect the whole sheet at its intended viewing size, then zoom into
    dense regions. Check wire
    alignment, MUX select attachment, crossings, text wrapping, clipping, and register port
-   placement. Fix the source and regenerate; do not paint over errors in the preview.
+   placement, text overflowing or resting on a box border, a FIFO/register symbol line
+   striking through a label, and a many-input MUX whose crammed inputs force a non-straight
+   fan-in. `Page.check()` flags diagonal wires, block penetration, partial label/block
+   overlap and probable text overflow, but a rendered PNG read at full size is still required;
+   a zero from the checker is necessary, not sufficient. Fix the source and regenerate; do
+   not paint over errors in the preview.
 
 For a compact overview, additionally trace one complete input-to-output route without
 jumping between repeated signal names. Trace ready/free in the opposite direction and
