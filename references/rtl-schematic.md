@@ -164,6 +164,10 @@ The `reg()` clock marker is symbolic; add actual clock/reset nets when the reque
 needs them. Do not invent a second data path for a decorative clock marker.
 
 Write XML with ElementTree so newlines in label attributes survive a save/load round trip.
+A hand-written edge that carries only `sourcePoint`/`targetPoint` with no `source`/`target`
+cell is dropped silently by the draw.io CLI export, so a free connector mark such as a MUX
+select stub never appears -- draw such marks as a thin filled rectangle or a real pin-connected
+edge, and confirm in the render that they are actually there.
 Retain custom stencils and native text/shapes; a bitmap embedded in `.drawio` is not editable
 schematic content. Avoid external image references or online editors for confidential RTL.
 
