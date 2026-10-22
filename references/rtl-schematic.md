@@ -106,7 +106,7 @@ memory primitive, timing result, or throughput guarantee from a behavioral expre
   square registered blocks and use an approved reference's pale fills.
   Keep figure text to English identifiers, widths, operators and short technical labels;
   place explanatory prose in accompanying documentation.
-- Use a trapezoid for a MUX, with visible 0/1 inputs and a separate select pin. Use a register
+- Use a trapezoid for a MUX, with visible 0/1 inputs and a separate select pin. The select wire must stop at a connection point ON the symbol edge and never run past it into the body; when the entry sits on a slanted edge where exact alignment is awkward, attach it with a small pin square exactly as data inputs/outputs connect, rather than letting the wire overshoot inside. Use a register
   rectangle with a clock-edge marker and label its enable/reset where relevant. Distinguish
   FIFOs/memories from arithmetic and ordinary module rectangles.
 - Size a many-input MUX or combiner tall enough that each numbered input pin sits at the
