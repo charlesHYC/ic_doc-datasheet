@@ -106,9 +106,13 @@ memory primitive, timing result, or throughput guarantee from a behavioral expre
   square registered blocks and use an approved reference's pale fills.
   Keep figure text to English identifiers, widths, operators and short technical labels;
   place explanatory prose in accompanying documentation.
-- Use a trapezoid for a MUX, with visible 0/1 inputs and a separate select pin. The select wire must stop at a pin square centred on the symbol's bottom edge and never run past it into the body; on a slanted edge where exact alignment is awkward, attach it with a small pin square exactly as data inputs/outputs connect (track the slant so the square sits on the edge), rather than letting the wire overshoot inside. Use a register
+- Use a trapezoid for a MUX, with visible 0/1 inputs and a separate select pin. The select wire must stop at a pin square centred on the symbol's bottom edge and never run past it into the body; on a slanted edge where exact alignment is awkward, attach it with a small pin square exactly as data inputs/outputs connect (track the slant so the square sits on the edge), rather than letting the wire overshoot inside. A MUX carries a single select: draw the control once, not as several parallel selector wires, and keep a repeated-value copy on its source chain rather than fanning a second selector out of the symbol. Use a register
   rectangle with a clock-edge marker and label its enable/reset where relevant. Distinguish
   FIFOs/memories from arithmetic and ordinary module rectangles.
+- Each block should be a real instance: a module, register, FIFO, memory or arithmetic
+  operator that exists in the RTL. Do not promote a sub-expression that lives inside a module
+  into its own block; show such internal logic as a label on the wire. Expand a module into
+  its internal blocks only when that expanded view is explicitly requested.
 - Size a many-input MUX or combiner tall enough that each numbered input pin sits at the
   height of its source block, so every fan-in wire stays a straight horizontal segment; a
   short MUX with its inputs crammed together forces doglegs and reads as wrong.
@@ -118,6 +122,11 @@ memory primitive, timing result, or throughput guarantee from a behavioral expre
   lower its font size; never let text spill out or rest on the frame.
 - Show arithmetic with the actual operator and necessary result width. Comparators and
   Boolean logic need their predicate or operator, not generic boxes named “processing.”
+- Label each datapath wire with its bus width, above all where the width changes (a
+  width converter, a combiner, a 1:N split). A datapath wire with no width reads as
+  unfinished. After you regenerate the drawing or move it to a different generator or
+  helper, re-confirm that every width label and annotation survived; these drop silently
+  when the port changes and are easy to miss.
 - Connect edges to explicit pin vertices with source/target IDs. Use off-page terminals
   for named continuations; repeat the same signal identifier at the other end. Terminals
   represent continuations, not hidden hardware. Avoid a diagram consisting solely of
@@ -224,6 +233,20 @@ compares (counter, mode bit) into that block, not into a downstream block.
 isolation FIFOs, clock-domain crossings that do not change the data) usually do not
 belong in a functional explanation. Follow the user's choice; do not re-introduce such
 blocks into the drawing or the narrative unless asked about them.
+
+**A datapath to an external interface is not a direct wire.** When a datapath leaves the
+block for an external interface or a different clock domain, show the real stage it must
+cross -- an output/elastic buffer, an asynchronous FIFO for a clock-domain crossing --
+rather than running the last compute block straight into the external sink. Omitting it
+in a system view misstates the design. (A purely functional explanation may still drop a
+timing-only block per the rule above; a system view that reaches an external interface
+should not.)
+
+**A reused block must meet the new target.** When a block is carried over from a different
+design point, confirm it supports the new rate, width or protocol before you label it in.
+A component that fits the old target but not the new one is a wrong block, not a shortcut;
+naming it asserts a capability it does not have. The same caution applies to any carried-over
+number: re-derive it for the new operating point instead of copying it across.
 
 **Variants from one generator.** Overview, detailed, and with/without a planned design
 are often all wanted. Build them from one generator with switches rather than editing
